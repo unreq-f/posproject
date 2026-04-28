@@ -56,6 +56,30 @@
           historyShift: null,
           selectedOrder: null,
           showOrderDetail: false,
+          showUserModal: false,
+          isNewUser: false,
+          selectedUser: {username: '', email: '', role: 'staff', password: ''},
+          async saveUser() {
+              const method = this.isNewUser ? 'POST' : 'PUT';
+              const url = this.isNewUser ? '/api/users/' : `/api/users/${this.selectedUser.id}/`;
+              try {
+                  const res = await fetch(url, {
+                      method: method,
+                      headers: { 
+                          'Content-Type': 'application/json',
+                          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                      },
+                      body: JSON.stringify(this.selectedUser)
+                  });
+                  if (res.ok) {
+                      alert('Користувача збережено!');
+                      window.location.reload();
+                  } else {
+                      const err = await res.json();
+                      alert('Помилка: ' + JSON.stringify(err));
+                  }
+              } catch(e) { alert('Помилка мережі'); }
+          },
           showDishForm: false,
           isNewDish: false,
           async viewOrder(id) {
@@ -640,36 +664,47 @@
                     <div class="flex justify-between items-end mb-8">
                         <div>
                             <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-2">Співробітники</h2>
-                            <p class="font-bold text-stone-500">Керування доступами та касами</p>
+                            <p class="font-bold text-stone-500">Керування доступами та персоналом їдальні</p>
                         </div>
-                        <button @click="window.location.href='/admin/users/user/add/'" class="px-6 py-3 bg-stone-800 text-white font-bold rounded-2xl transition-all active:scale-95 flex items-center shadow-lg"><i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Додати співробітника</button>
+                        <button @click="selectedUser = {username: '', email: '', role: 'staff', password: ''}; isNewUser = true; showUserModal = true" class="px-6 py-3 bg-stone-800 text-white font-bold rounded-2xl transition-all active:scale-95 flex items-center shadow-lg"><i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Додати співробітника</button>
                     </div>
-                    <div class="bg-white rounded-3xl border border-stone-200 overflow-hidden">
+                    <div class="bg-white rounded-3xl border border-stone-200 overflow-hidden shadow-sm">
                         <table class="w-full text-left">
-                            <thead class="bg-stone-50 border-b border-stone-200 text-stone-400 text-xs font-bold uppercase tracking-widest">
-                                <tr><th class="p-4">Співробітник</th><th class="p-4">Роль</th><th class="p-4">Локація</th><th class="p-4">Статус</th><th class="p-4 text-right">Дії</th></tr>
+                            <thead class="bg-stone-50 border-b border-stone-200 text-stone-400 text-[10px] font-black uppercase tracking-widest">
+                                <tr><th class="p-6">Користувач</th><th class="p-6">Роль</th><th class="p-6">Email</th><th class="p-6">Статус</th><th class="p-6 text-right">Дії</th></tr>
                             </thead>
                             <tbody class="font-bold text-stone-800 divide-y divide-stone-100">
+                                {% for u in users_list %}
                                 <tr class="hover:bg-stone-50/50 transition-colors">
-                                    <td class="p-4 flex items-center">
-                                        <div class="w-10 h-10 rounded-full bg-stone-200 overflow-hidden mr-4 border border-stone-300"><img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop" class="w-full h-full object-cover"></div>
-                                        Олександр (Каса 1)
+                                    <td class="p-6 flex items-center">
+                                        <div class="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center mr-4 border border-stone-200 text-stone-400 font-black">
+                                            {{ u.username|slice:":1"|upper }}
+                                        </div>
+                                        <div>
+                                            <div class="text-stone-900">{{ u.username }}</div>
+                                            <div class="text-[10px] text-stone-400 font-bold uppercase">{{ u.first_name }} {{ u.last_name }}</div>
+                                        </div>
                                     </td>
-                                    <td class="p-4 text-sm font-semibold text-stone-500">Касир</td>
-                                    <td class="p-4 text-sm font-semibold text-stone-500">Їдальня на Шевченка</td>
-                                    <td class="p-4"><span class="px-3 py-1 bg-brand-olive/10 text-brand-olive text-xs rounded-full border border-brand-olive/20">Активний</span></td>
-                                    <td class="p-4 text-right"><button class="text-stone-400 hover:text-brand-terracotta"><i data-lucide="edit-2" class="w-5 h-5"></i></button></td>
-                                </tr>
-                                <tr class="hover:bg-stone-50/50 transition-colors">
-                                    <td class="p-4 flex items-center">
-                                        <div class="w-10 h-10 rounded-full bg-stone-200 overflow-hidden mr-4 border border-stone-300"><img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop" class="w-full h-full object-cover"></div>
-                                        Ірина К. (Каса 1)
+                                    <td class="p-6">
+                                        <span class="px-3 py-1 bg-stone-100 text-stone-600 text-[10px] rounded-full border border-stone-200 uppercase font-black">
+                                            {{ u.get_role_display }}
+                                        </span>
                                     </td>
-                                    <td class="p-4 text-sm font-semibold text-stone-500">Касир</td>
-                                    <td class="p-4 text-sm font-semibold text-stone-500">Їдальня на Шевченка</td>
-                                    <td class="p-4"><span class="px-3 py-1 bg-stone-200/50 text-stone-500 text-xs rounded-full border border-stone-200">Вихідний</span></td>
-                                    <td class="p-4 text-right"><button class="text-stone-400 hover:text-brand-terracotta"><i data-lucide="edit-2" class="w-5 h-5"></i></button></td>
+                                    <td class="p-6 text-sm text-stone-500">{{ u.email|default:"—" }}</td>
+                                    <td class="p-6">
+                                        {% if u.is_active %}
+                                        <span class="px-3 py-1 bg-brand-olive/10 text-brand-olive text-[10px] rounded-full border border-brand-olive/20 uppercase font-black">Активний</span>
+                                        {% else %}
+                                        <span class="px-3 py-1 bg-stone-100 text-stone-400 text-[10px] rounded-full border border-stone-200 uppercase font-black">Заблокований</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-6 text-right">
+                                        <button @click="selectedUser = {id: {{ u.id }}, username: '{{ u.username }}', email: '{{ u.email }}', role: '{{ u.role }}', is_active: {{ u.is_active|yesno:'true,false' }} }; isNewUser = false; showUserModal = true" class="text-stone-400 hover:text-brand-terracotta transition-colors">
+                                            <i data-lucide="edit-2" class="w-5 h-5"></i>
+                                        </button>
+                                    </td>
                                 </tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
@@ -930,6 +965,53 @@
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        <!-- USER MODAL -->
+        <div x-show="showUserModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm" x-transition style="display: none;">
+            <div class="bg-brand-paper rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" @click.away="showUserModal = false">
+                <div class="p-8 border-b border-stone-200/60 bg-brand-cream flex justify-between items-center">
+                    <h2 class="text-2xl font-black text-stone-900 tracking-tight" x-text="isNewUser ? 'Новий співробітник' : 'Редагувати профіль'"></h2>
+                    <button @click="showUserModal = false" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+                </div>
+                <div class="p-8 space-y-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="block text-stone-400 font-bold text-[10px] uppercase tracking-widest">Логін</label>
+                            <input type="text" x-model="selectedUser.username" class="w-full bg-white border border-stone-200 rounded-xl p-3 font-bold outline-none focus:border-brand-terracotta transition-colors">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-stone-400 font-bold text-[10px] uppercase tracking-widest">Email</label>
+                            <input type="email" x-model="selectedUser.email" class="w-full bg-white border border-stone-200 rounded-xl p-3 font-bold outline-none focus:border-brand-terracotta transition-colors">
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="block text-stone-400 font-bold text-[10px] uppercase tracking-widest">Роль в системі</label>
+                        <select x-model="selectedUser.role" class="w-full bg-white border border-stone-200 rounded-xl p-3 font-bold outline-none focus:border-brand-terracotta transition-colors appearance-none">
+                            <option value="admin">Управляючий</option>
+                            <option value="staff">Касир / Кухня</option>
+                            <option value="client">Клієнт</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-stone-400 font-bold text-[10px] uppercase tracking-widest" x-text="isNewUser ? 'Пароль' : 'Новий пароль (залиште порожнім, якщо не змінюєте)'"></label>
+                        <input type="password" x-model="selectedUser.password" class="w-full bg-white border border-stone-200 rounded-xl p-3 font-bold outline-none focus:border-brand-terracotta transition-colors">
+                    </div>
+
+                    <template x-if="!isNewUser">
+                        <div class="flex items-center space-x-3 p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                            <input type="checkbox" x-model="selectedUser.is_active" class="w-5 h-5 rounded border-stone-300 text-brand-terracotta focus:ring-brand-terracotta">
+                            <span class="font-bold text-stone-700">Активний акаунт</span>
+                        </div>
+                    </template>
+
+                    <button @click="saveUser()" class="w-full py-4 bg-brand-terracotta text-white font-black text-lg rounded-xl shadow-lg shadow-brand-terracotta/20 transition-all active:scale-95">
+                        ЗБЕРЕГТИ ДАНІ
+                    </button>
+                </div>
             </div>
         </div>
 

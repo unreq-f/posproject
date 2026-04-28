@@ -75,6 +75,9 @@ class AdminDashboardView(LoginRequiredMixin, View):
             # Fallback for UI if no active shift but we want to show something?
             pass
         
+        from users.models import User
+        users_list = User.objects.all().order_by('-id')
+
         return render(request, 'canteen/admin_dashboard.html', {
             'shifts': shifts,
             'active_shift': active_shift,
@@ -85,6 +88,7 @@ class AdminDashboardView(LoginRequiredMixin, View):
             'average_check': average_check,
             'all_orders': all_orders,
             'past_shifts': past_shifts,
+            'users_list': users_list,
             'current_shift_revenue': current_shift_revenue,
             'current_shift_orders': current_shift_orders,
             'current_shift_inventory': current_shift_inventory,

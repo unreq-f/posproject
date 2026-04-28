@@ -65,10 +65,12 @@ class ClientMenuView(LoginRequiredMixin, View):
         from canteen.models import Shift
         from datetime import datetime, timedelta
         
-        active_shift = Shift.objects.filter(status='open').last()
+        active_shift = Shift.objects.filter(status='open').first()
         inventory = []
+        combos = []
         if active_shift:
             inventory = Inventory.objects.filter(shift=active_shift).select_related('dish')
+            combos = ComboMeal.objects.all()
         
         # Генерація слотів часу (кожні 15 хв)
         now = datetime.now()
@@ -96,6 +98,7 @@ class ClientMenuView(LoginRequiredMixin, View):
 
         return render(request, 'orders/client_menu.html', {
             'inventory': inventory,
+            'combos': combos,
             'active_shift': active_shift,
             'time_slots': slots[:12] # Показуємо найближчі 3 години
         })

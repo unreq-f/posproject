@@ -1,55 +1,46 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, permissions
+from django.views.generic import CreateView, RedirectView
+from django.contrib.auth.forms import UserCreationForm
+from django.urls import reverse_lazy, reverse
+from django.contrib.auth.mixins import LoginRequiredMixin
 from .models import User
 from .serializers import UserSerializer
-from django.shortcuts import render, redirect
-from django.views import View
-from django.contrib.auth import login
-from django.contrib.auth.mixins import LoginRequiredMixin
-
-class RoleBasedRedirectView(LoginRequiredMixin, View):
-    """Редирект після логіну залежно від ролі користувача"""
-    def get(self, request):
-        if request.user.role == 'admin':
-            return redirect('admin_dashboard')
-        elif request.user.role == 'cashier':
-            return redirect('pos')
-        else:
-            return redirect('client_menu')
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+    queryset = User.objects.all().order_by('id')
     serializer_class = UserSerializer
+    permission_classes = [permissions.IsAdminUser]
 
-class SignupView(View):
-    """Реєстрація нового клієнта"""
-    def post(self, request):
-        username = request.POST.get('username', '').strip()
-        first_name = request.POST.get('first_name', '').strip()
-        password = request.POST.get('password', '').strip()
-        password2 = request.POST.get('password2', '').strip()
+    def get_queryset(self):
+        role = self.request.query_params.get('role')
+        if role:
+            return self.queryset.filter(role=role)
+        return self.queryset
 
-        errors = []
-        if not username or not password:
-            errors.append('Заповніть всі обов\'язкові поля.')
-        if password != password2:
-            errors.append('Паролі не співпадають.')
-        if len(password) < 6:
-            errors.append('Пароль має бути не менше 6 символів.')
-        if User.objects.filter(username=username).exists():
-            errors.append('Користувач з таким логіном вже існує.')
+class SignupView(CreateView):
+    form_class = UserCreationForm
+    template_name = 'users/login.html'
+    success_url = reverse_lazy('login')
 
-        if errors:
-            return render(request, 'users/login.html', {
-                'signup_errors': errors,
-                'show_signup': True,
-                'signup_username': username,
-                'signup_first_name': first_name,
-            })
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['show_signup'] = True
+        return context
 
-        user = User(username=username, first_name=first_name, role='client')
-        user.set_password(password)
+    def form_valid(self, form):
+        user = form.save(commit=False)
+        user.role = 'client'
         user.save()
+        return super().form_valid(form)
 
-        login(request, user)
-        return redirect('client_menu')
-
+class RoleBasedRedirectView(LoginRequiredMixin, RedirectView):
+    permanent = False
+    
+    def get_redirect_url(self, *args, **kwargs):
+        user = self.request.user
+        if user.role == 'admin':
+            return reverse('admin_dashboard')
+        elif user.role == 'staff':
+            return reverse('pos')
+        else:
+            return reverse('client_menu')
