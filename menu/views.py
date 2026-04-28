@@ -8,10 +8,13 @@ from .serializers import DishSerializer, ComboMealSerializer, InventorySerialize
 from .services import add_inventory
 from django.shortcuts import get_object_or_404
 
+from rest_framework.parsers import MultiPartParser, FormParser
+
 class DishViewSet(viewsets.ModelViewSet):
     queryset = Dish.objects.all()
     serializer_class = DishSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser]
 
 class ComboMealViewSet(viewsets.ModelViewSet):
     queryset = ComboMeal.objects.all()

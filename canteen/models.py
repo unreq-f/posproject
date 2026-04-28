@@ -12,6 +12,9 @@ class Shift(models.Model):
     initial_cash = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Розмінний фонд")
     responsible_staff = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='shifts')
 
+    class Meta:
+        ordering = ['-id']
+
     def __str__(self):
         return f"Смена {self.id} ({self.get_status_display()})"
 

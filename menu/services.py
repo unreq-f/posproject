@@ -25,4 +25,13 @@ def add_inventory(shift: Shift, dish: Dish, quantity: int) -> Inventory:
         
         # Обновляем объект из БД, чтобы получить актуальное значение quantity после применения F()
         inventory.refresh_from_db()
+        
+        # ФІКСАЦІЯ В ІСТОРІЇ: створюємо запис про поповнення
+        from .models import Replenishment
+        Replenishment.objects.create(
+            shift=shift,
+            dish=dish,
+            quantity=quantity
+        )
+        
         return inventory

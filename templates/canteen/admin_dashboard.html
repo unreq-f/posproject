@@ -36,11 +36,116 @@
 </head>
 <body class="bg-brand-cream text-stone-800 h-screen overflow-hidden flex flex-col" 
       x-data="{ 
-          adminTab: 'shifts', 
+          adminTab: localStorage.getItem('adminTab') || 'dashboard', 
           showWriteOffModal: false, 
           showReplenishModal: false, 
           adminShiftState: '{% if active_shift %}active{% else %}empty{% endif %}', 
           showCreateShiftModal: false,
+          init() {
+              if (this.adminTab === 'history-detail') this.adminTab = 'history';
+              this.$watch('adminTab', value => {
+                  localStorage.setItem('adminTab', value);
+                  this.$nextTick(() => lucide.createIcons());
+              });
+              this.$watch('showReplenishModal', () => this.$nextTick(() => lucide.createIcons()));
+              this.$watch('showCreateShiftModal', () => this.$nextTick(() => lucide.createIcons()));
+              this.$watch('showDishForm', () => this.$nextTick(() => lucide.createIcons()));
+              this.$watch('historyShift', () => this.$nextTick(() => lucide.createIcons()));
+          },
+          selectedDish: null,
+          historyShift: null,
+          selectedOrder: null,
+          showOrderDetail: false,
+          showDishForm: false,
+          isNewDish: false,
+          async viewOrder(id) {
+              try {
+                  const res = await fetch(`/api/orders/${id}/`);
+                  if (res.ok) {
+                      this.selectedOrder = await res.json();
+                      this.showOrderDetail = true;
+                      this.$nextTick(() => lucide.createIcons());
+                  }
+              } catch(e) { alert('Помилка завантаження замовлення'); }
+          },
+          replenishList: [
+              {% if active_shift %}
+                {% for inv in current_shift_inventory %}
+                { id: {{ inv.dish.id }}, name: '{{ inv.dish.name }}', current: {{ inv.quantity }}, add: 0 },
+                {% endfor %}
+              {% endif %}
+          ],
+          async viewShift(id) {
+              try {
+                  const res = await fetch(`/api/shifts/${id}/detailed/`);
+                  if (res.ok) {
+                      this.historyShift = await res.json();
+                      this.adminTab = 'history-detail';
+                  }
+              } catch (e) { alert('Помилка завантаження даних зміни'); }
+          },
+          async replenishShowcase() {
+              const activeShiftId = {% if active_shift %}{{ active_shift.id }}{% else %}null{% endif %};
+              if(!activeShiftId) return;
+              try {
+                  for (let item of this.replenishList.filter(i => i.add > 0)) {
+                      await fetch('/api/inventory/add_to_showcase/', {
+                          method: 'POST',
+                          headers: { 
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
+                          },
+                          body: JSON.stringify({ shift_id: activeShiftId, dish_id: item.id, quantity: item.add })
+                      });
+                  }
+                  window.location.reload();
+              } catch(e) { alert('Помилка поповнення'); }
+          },
+          async saveDish() {
+              const formData = new FormData();
+              formData.append('name', this.selectedDish.name);
+              formData.append('category', this.selectedDish.category);
+              formData.append('price', this.selectedDish.price);
+              formData.append('description', this.selectedDish.description || '');
+              
+              const imageInput = document.getElementById('dish_image_input');
+              if(imageInput && imageInput.files[0]) {
+                  formData.append('image', imageInput.files[0]);
+              }
+
+              const url = this.isNewDish ? '/api/dishes/' : `/api/dishes/${this.selectedDish.id}/`;
+              const method = this.isNewDish ? 'POST' : 'PATCH';
+
+              try {
+                  const res = await fetch(url, {
+                      method: method,
+                      headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+                      body: formData
+                  });
+                  if(res.ok) window.location.reload();
+                  else alert('Помилка збереження страви');
+              } catch(e) { alert('Помилка мережі'); }
+          },
+          shiftDishes: [
+              {% for dish in dishes %}
+              { id: {{ dish.id }}, name: '{{ dish.name }}', qty: 0, category: '{{ dish.category }}', price: {{ dish.price }} },
+              {% endfor %}
+          ],
+          async cancelOrder(id) {
+              if(!confirm('Ви впевнені, що хочете СКАСУВАТИ це замовлення? Товари будуть повернуті на вітрину.')) return;
+              try {
+                  const res = await fetch(`/api/orders/${id}/cancel/`, {
+                      method: 'POST',
+                      headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+                  });
+                  if(res.ok) {
+                      window.location.reload();
+                  } else {
+                      const err = await res.json();
+                      alert('Помилка скасування: ' + (err.detail || JSON.stringify(err)));
+                  }
+              } catch(e) { alert('Помилка мережі'); }
+          },
           async closeShift(id) {
               if(!confirm('Ви впевнені, що хочете закрити зміну?')) return;
               try {
@@ -70,6 +175,22 @@
                       })
                   });
                   if(res.ok) {
+                      const shiftData = await res.json();
+                      // After creating shift, add inventory
+                      for (let item of this.shiftDishes.filter(d => d.qty > 0)) {
+                          await fetch('/api/inventory/add_to_showcase/', {
+                              method: 'POST',
+                              headers: { 
+                                  'Content-Type': 'application/json',
+                                  'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
+                              },
+                              body: JSON.stringify({
+                                  shift_id: shiftData.id,
+                                  dish_id: item.id,
+                                  quantity: item.qty
+                              })
+                          });
+                      }
                       window.location.reload();
                   } else {
                       const err = await res.json();
@@ -95,10 +216,12 @@
             </div>
             
             <nav class="flex-1 px-4 space-y-2 font-bold text-lg text-stone-600">
-                <button @click="adminTab = 'dashboard'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'dashboard'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900">Дашборд</button>
-                <button @click="adminTab = 'shifts'; setTimeout(() => lucide.createIcons(), 50)" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'shifts'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900">Зміни</button>
-                <button @click="adminTab = 'menu'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'menu'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900">Меню</button>
-                <button @click="adminTab = 'users'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'users'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900">Персонал</button>
+                <button @click="adminTab = 'dashboard'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'dashboard'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="layout-dashboard" class="w-5 h-5 mr-3 opacity-60"></i> Дашборд</button>
+                <button @click="adminTab = 'active-shift'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'active-shift'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="play-circle" class="w-5 h-5 mr-3 opacity-60"></i> Поточна зміна</button>
+                <button @click="adminTab = 'orders'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'orders'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="shopping-cart" class="w-5 h-5 mr-3 opacity-60"></i> Замовлення</button>
+                <button @click="adminTab = 'history'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'history' || adminTab === 'history-detail'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="history" class="w-5 h-5 mr-3 opacity-60"></i> Історія змін</button>
+                <button @click="adminTab = 'menu'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'menu'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="utensils" class="w-5 h-5 mr-3 opacity-60"></i> Меню</button>
+                <button @click="adminTab = 'users'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'users'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="users" class="w-5 h-5 mr-3 opacity-60"></i> Персонал</button>
             </nav>
             
             <div class="p-8 border-t border-stone-200/60">
@@ -114,8 +237,8 @@
             <!-- Header -->
             <header class="px-16 py-10 flex items-end justify-between shrink-0">
                 <div>
-                    <h1 class="text-5xl font-black text-stone-900 tracking-tighter mb-2" x-text="{dashboard:'Огляд показників', shifts:'Управління змінами', menu:'Управління меню', users:'Персонал та Ролі'}[adminTab]"></h1>
-                    <p class="text-lg font-semibold text-stone-500" x-text="{dashboard:'Сьогодні, 28 Квітня', shifts:'Контроль відкриття, закриття та поповнення', menu:'Редагування асортименту та онлайн-вітрини', users:'Налаштування доступів співробітників'}[adminTab]"></p>
+                    <h1 class="text-5xl font-black text-stone-900 tracking-tighter mb-2" x-text="{dashboard:'Огляд показників', 'active-shift':'Поточна зміна', orders:'Усі замовлення', history:'Архів змін', menu:'Управління меню', users:'Персонал та Ролі'}[adminTab]"></h1>
+                    <p class="text-lg font-semibold text-stone-500" x-text="{dashboard:'Сьогодні, 28 Квітня', 'active-shift':'Керування відкритою касою та залишками', orders:'Фільтрація та скасування чеків', history:'Перегляд закритих касових днів', menu:'Редагування асортименту та онлайн-вітрини', users:'Налаштування доступів співробітників'}[adminTab]"></p>
                 </div>
                 <div class="flex items-center space-x-6">
                     <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-stone-200 cursor-pointer">
@@ -130,247 +253,384 @@
                     <div class="flex space-x-16 pb-10">
                         <div>
                             <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Загальний дохід</h3>
-                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">34.8<span class="text-4xl text-stone-400 ml-1">k ₴</span></span></div>
-                            <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="arrow-up-right" class="w-5 h-5 mr-1"></i> 12.4% <span class="text-stone-400 font-medium ml-2 text-sm">до вчора</span></div>
+                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">{{ total_revenue|floatformat:1 }}<span class="text-4xl text-stone-400 ml-1">₴</span></span></div>
+                            <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="trending-up" class="w-5 h-5 mr-1"></i> Динамічно <span class="text-stone-400 font-medium ml-2 text-sm">на основі замовлень</span></div>
                         </div>
                         <div>
                             <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Замовлення</h3>
-                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">847</span></div>
-                            <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="arrow-up-right" class="w-5 h-5 mr-1"></i> 8.7%</div>
+                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">{{ total_orders }}</span></div>
+                            <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="shopping-bag" class="w-5 h-5 mr-1"></i> Усього</div>
                         </div>
                         <div>
                             <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Середній чек</h3>
-                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">41<span class="text-4xl text-stone-400 ml-1">₴</span></span></div>
-                            <div class="text-brand-coral font-bold flex items-center text-lg"><i data-lucide="arrow-down-right" class="w-5 h-5 mr-1"></i> 3.2%</div>
+                            <div class="flex items-baseline mb-2"><span class="text-7xl font-black text-stone-900 tracking-tighter">{{ average_check|floatformat:0 }}<span class="text-4xl text-stone-400 ml-1">₴</span></span></div>
+                            <div class="text-brand-coral font-bold flex items-center text-lg">Автоматичний розрахунок</div>
                         </div>
                     </div>
 
-                    <div class="mb-14 border-t border-stone-200/60 pt-10">
-                        <h2 class="text-2xl font-black text-stone-900 tracking-tighter mb-8">Продажі по годинах (Пікові навантаження)</h2>
-                        <div class="h-48 flex items-end justify-between space-x-1 border-b border-stone-300 pb-2 relative">
-                            <div class="absolute left-0 bottom-full -ml-8 flex flex-col justify-between h-full text-[10px] font-bold text-stone-400 pb-2"><span>8K</span><span>4K</span><span>0</span></div>
-                            <div class="w-full bg-stone-200 rounded-t-sm bar-chart" style="--h: 10%"></div>
-                            <div class="w-full bg-stone-200 rounded-t-sm bar-chart" style="--h: 30%"></div>
-                            <div class="w-full bg-brand-terracotta rounded-t-md bar-chart opacity-90" style="--h: 85%"></div>
-                            <div class="w-full bg-stone-200 rounded-t-sm bar-chart" style="--h: 40%"></div>
+                    <div class="grid grid-cols-2 gap-10 mt-6">
+                        <div class="bg-white p-10 rounded-[3rem] border border-stone-200 shadow-sm">
+                            <h3 class="text-2xl font-black text-stone-900 mb-6">Останні 5 замовлень</h3>
+                            <div class="space-y-4">
+                                {% for order in all_orders|slice:":5" %}
+                                <div class="flex items-center justify-between p-4 bg-stone-50 rounded-2xl">
+                                    <div class="flex items-center">
+                                        <div class="w-10 h-10 rounded-xl bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center mr-4"><i data-lucide="receipt" class="w-5 h-5"></i></div>
+                                        <div><div class="font-bold">#{{ order.id }}</div><div class="text-xs text-stone-400">{{ order.created_at|date:"H:i" }}</div></div>
+                                    </div>
+                                    <div class="font-black">{{ order.total_amount }} ₴</div>
+                                </div>
+                                {% endfor %}
+                            </div>
                         </div>
-                        <div class="flex justify-between mt-2 text-[10px] font-bold text-stone-400"><span>08:00</span><span>12:00</span><span>16:00</span><span>19:00</span></div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-16">
-                        <div>
-                            <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-8">Маржинальність страв</h2>
-                            <table class="w-full text-left">
-                                <thead class="border-b border-stone-200/60">
-                                    <tr class="text-stone-400 text-xs font-bold uppercase tracking-widest"><th class="pb-4">Назва</th><th class="pb-4">Маржа</th><th class="pb-4 text-right">На вітрині</th></tr>
-                                </thead>
-                                <tbody class="text-lg font-bold text-stone-800">
-                                    <tr class="border-b border-stone-100/50"><td class="py-5">Салат Грецький</td><td class="py-5 text-brand-olive">72%</td><td class="py-5 text-right font-medium text-stone-500">12 порцій</td></tr>
-                                    <tr><td class="py-5">Котлета по-київськи</td><td class="py-5 text-brand-coral flex items-center">19.7% <i data-lucide="alert-triangle" class="w-4 h-4 ml-2 opacity-50"></i></td><td class="py-5 text-right font-medium text-stone-500">2 порції</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="bg-brand-paper rounded-3xl p-10">
-                            <h2 class="text-2xl font-black text-stone-900 tracking-tighter mb-8">Задачі на сьогодні</h2>
-                            <ul class="space-y-6 font-bold text-stone-800 text-lg">
-                                <li class="flex items-start">
-                                    <button @click="showWriteOffModal = true" class="flex items-center group text-left">
-                                        <div class="w-6 h-6 rounded border-2 border-stone-300 mr-4 group-hover:border-brand-terracotta transition-colors flex shrink-0"></div>
-                                        <span class="group-hover:text-brand-terracotta transition-colors">Списати залишки (Зміна #105)</span>
-                                    </button>
-                                </li>
-                            </ul>
+                        <div class="bg-brand-paper p-10 rounded-[3rem] border border-stone-200 shadow-sm relative overflow-hidden">
+                            <i data-lucide="bar-chart-3" class="absolute -bottom-10 -right-10 w-48 h-48 text-stone-200 opacity-20"></i>
+                            <h3 class="text-2xl font-black text-stone-900 mb-2">Статистика</h3>
+                            <p class="font-bold text-stone-500 mb-6">Виручка за сьогодні</p>
+                            <div class="text-5xl font-black text-brand-terracotta">{{ current_shift_revenue|floatformat:1 }} ₴</div>
+                            <p class="text-sm font-bold text-stone-400 mt-4">На основі поточної відкритої зміни</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- SHIFTS TAB -->
-                <div x-show="adminTab === 'shifts'" x-transition>
-                    
-                    <!-- Empty State: No Active Shift -->
-                    <div x-show="adminShiftState === 'empty'" class="bg-brand-paper rounded-3xl p-16 text-center border-2 border-dashed border-stone-300 mb-10 flex flex-col items-center justify-center">
-                        <div class="w-24 h-24 rounded-full bg-stone-200/50 flex items-center justify-center mb-6">
-                            <i data-lucide="calendar-plus" class="w-10 h-10 text-stone-400"></i>
-                        </div>
-                        <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-2">Немає активної зміни</h2>
-                        <p class="text-lg font-bold text-stone-500 mb-8 max-w-md">Касири не можуть розпочати роботу, поки ви не відкриєте торгову зміну та не передасте їм залишки на вітрину.</p>
-                        <button @click="showCreateShiftModal = true; setTimeout(() => lucide.createIcons(), 50)" class="px-10 py-4 bg-brand-terracotta text-white font-black text-lg rounded-2xl shadow-lg shadow-brand-terracotta/20 hover:bg-[#7c2a0e] transition-all active:scale-95 flex items-center">
-                            <i data-lucide="play" class="w-5 h-5 mr-3"></i> ВІДКРИТИ НОВУ ЗМІНУ
-                        </button>
-                    </div>
-
-                    <!-- Active Shift State -->
-                    <div x-show="adminShiftState === 'active'">
-                        {% if active_shift %}
-                        <!-- Active Shift Card -->
-                        <div class="bg-brand-paper rounded-3xl p-10 mb-10 border border-stone-200/60">
-                            <div class="flex justify-between items-start mb-8">
-                                <div>
-                                    <div class="flex items-center space-x-4 mb-2">
-                                        <h2 class="text-4xl font-black text-stone-900 tracking-tighter">Зміна #{{ active_shift.id }}</h2>
-                                        <span class="px-4 py-1.5 bg-brand-olive/10 text-brand-olive font-bold text-sm rounded-full border border-brand-olive/20 flex items-center">
-                                            <span class="w-2 h-2 rounded-full bg-brand-olive mr-2 animate-pulse"></span> Відкрита
-                                        </span>
-                                    </div>
-                                    <p class="text-lg font-semibold text-stone-500">Касир: {{ active_shift.responsible_staff.username }} · Їдальня на Шевченка</p>
+                <!-- ACTIVE SHIFT TAB -->
+                <div x-show="adminTab === 'active-shift'" x-transition>
+                    {% if active_shift %}
+                    <div class="bg-brand-paper rounded-[3rem] p-10 border border-stone-200 mb-10">
+                        <div class="flex justify-between items-start mb-10">
+                            <div>
+                                <div class="flex items-center space-x-4 mb-2">
+                                    <h2 class="text-5xl font-black text-stone-900 tracking-tighter">Зміна #{{ active_shift.id }}</h2>
+                                    <span class="px-4 py-1.5 bg-brand-olive text-white font-black text-xs rounded-full animate-pulse flex items-center">
+                                        <span class="w-2 h-2 rounded-full bg-white mr-2"></span> ACTIVE
+                                    </span>
                                 </div>
-                                <button @click="closeShift({{ active_shift.id }})" class="px-6 py-3 bg-brand-coral/10 text-brand-coral font-bold rounded-2xl hover:bg-brand-coral/20 transition-colors border border-brand-coral/20 flex items-center">
-                                    <i data-lucide="lock" class="w-4 h-4 mr-2"></i> Списання та закриття
-                                </button>
+                                <p class="text-xl font-bold text-stone-500">Відповідальний: {{ active_shift.responsible_staff.username }}</p>
                             </div>
-                            <div class="grid grid-cols-4 gap-8">
-                                <div><h3 class="text-stone-400 font-bold text-xs uppercase tracking-widest mb-2">Відкрита о</h3><span class="text-3xl font-black text-stone-900 tracking-tighter">{{ active_shift.start_time|date:"H:i" }}</span></div>
-                                <div><h3 class="text-stone-400 font-bold text-xs uppercase tracking-widest mb-2">Дата</h3><span class="text-3xl font-black text-stone-900 tracking-tighter">{{ active_shift.start_time|date:"d.m" }}</span></div>
-                                <div><h3 class="text-stone-400 font-bold text-xs uppercase tracking-widest mb-2">Розмінний фонд</h3><span class="text-3xl font-black text-stone-900 tracking-tighter">{{ active_shift.initial_cash }} ₴</span></div>
-                                <div><h3 class="text-stone-400 font-bold text-xs uppercase tracking-widest mb-2">Замовлень</h3><span class="text-3xl font-black text-brand-olive tracking-tighter">{{ active_shift.orders.count }}</span></div>
-                            </div>
-                        </div>
-
-                        <!-- Inventory Status (Active Shift Only) -->
-                        <div class="flex justify-between items-end mb-8">
-                            <h2 class="text-3xl font-black text-stone-900 tracking-tighter">Залишки на вітрині</h2>
-                            <button @click="showReplenishModal = true" class="px-6 py-3 bg-brand-terracotta text-white font-bold rounded-2xl transition-all active:scale-95 flex items-center shadow-lg shadow-brand-terracotta/20">
-                                <i data-lucide="package-plus" class="w-5 h-5 mr-2"></i> Прийняти товар
+                            <button @click="closeShift({{ active_shift.id }})" class="px-8 py-4 bg-brand-coral text-white font-black text-lg rounded-2xl shadow-lg shadow-brand-coral/20 flex items-center transition-transform active:scale-95">
+                                <i data-lucide="power" class="w-5 h-5 mr-3"></i> ЗАКРИТИ ТА СПИСАТИ
                             </button>
                         </div>
-                        <table class="w-full text-left mb-12">
-                            <thead><tr class="text-stone-400 text-xs font-bold uppercase tracking-widest border-b border-stone-200/60"><th class="pb-4">Страва</th><th class="pb-4">Категорія</th><th class="pb-4 text-right">Зараз</th></tr></thead>
-                            <tbody class="text-lg font-bold text-stone-800">
-                                {% for item in active_shift.inventory.all %}
-                                <tr class="border-b border-stone-100/50">
-                                    <td class="py-5 flex items-center">{{ item.dish.name }}</td>
-                                    <td class="py-5 text-stone-500 font-medium">{{ item.dish.category }}</td>
-                                    <td class="py-5 text-right font-black text-stone-900">{{ item.quantity }}</td>
+                        <div class="grid grid-cols-4 gap-8">
+                            <div><div class="text-stone-400 font-bold text-xs uppercase mb-2">Виручка</div><div class="text-4xl font-black text-stone-900 tracking-tighter">{{ current_shift_revenue|floatformat:1 }} ₴</div></div>
+                            <div><div class="text-stone-400 font-bold text-xs uppercase mb-2">Замовлень</div><div class="text-4xl font-black text-stone-900 tracking-tighter">{{ current_shift_orders }}</div></div>
+                            <div><div class="text-stone-400 font-bold text-xs uppercase mb-2">Початок</div><div class="text-4xl font-black text-stone-900 tracking-tighter">{{ active_shift.start_time|date:"H:i" }}</div></div>
+                            <div><div class="text-stone-400 font-bold text-xs uppercase mb-2">Готівка (Початок)</div><div class="text-4xl font-black text-stone-900 tracking-tighter">{{ active_shift.initial_cash }} ₴</div></div>
+                            <div><div class="text-stone-400 font-bold text-xs uppercase mb-2">Очікувано в касі</div><div class="text-4xl font-black text-brand-olive tracking-tighter">{{ active_shift.expected_cash }} ₴</div></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                        <div class="bg-white rounded-[3rem] border border-stone-200 shadow-sm overflow-hidden h-fit">
+                            <div class="p-8 border-b border-stone-100 flex justify-between items-center">
+                                <h3 class="text-2xl font-black text-stone-900 tracking-tight">Залишки на вітрині</h3>
+                                <button @click="showReplenishModal = true" class="px-6 py-2 bg-stone-900 text-white font-bold rounded-xl text-sm hover:bg-stone-800 transition-colors">Поповнити</button>
+                            </div>
+                            <table class="w-full text-left">
+                                <thead class="bg-stone-50 text-stone-400 font-bold text-xs uppercase tracking-widest">
+                                    <tr><th class="p-6">Страва</th><th class="p-6 text-center">Залишок</th><th class="p-6 text-right">Ціна</th></tr>
+                                </thead>
+                                <tbody class="font-bold text-stone-800">
+                                    {% for inv in current_shift_inventory %}
+                                    <tr class="border-b border-stone-50 hover:bg-stone-50/50 transition-colors">
+                                        <td class="p-6">{{ inv.dish.name }}</td>
+                                        <td class="p-6 text-center text-xl {% if inv.quantity <= 5 %}text-brand-coral{% else %}text-brand-olive{% endif %}">{{ inv.quantity }}</td>
+                                        <td class="p-6 text-right">{{ inv.dish.price }} ₴</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="bg-white rounded-[3rem] border border-stone-200 shadow-sm overflow-hidden h-fit">
+                            <div class="p-8 border-b border-stone-100 flex justify-between items-center">
+                                <h3 class="text-2xl font-black text-stone-900 tracking-tight">Чеки зміни</h3>
+                                <div class="text-xs font-black text-stone-400 uppercase tracking-widest">{{ current_shift_orders_list|length }} ВСЬОГО</div>
+                            </div>
+                            <div class="max-h-[500px] overflow-y-auto">
+                                <table class="w-full text-left">
+                                    <thead class="bg-stone-50 text-stone-400 font-bold text-xs uppercase tracking-widest sticky top-0">
+                                        <tr><th class="p-6">ID</th><th class="p-6">Сума</th><th class="p-6">Тип</th><th class="p-6">Статус</th><th class="p-6 text-right">Дія</th></tr>
+                                    </thead>
+                                    <tbody class="font-bold text-stone-800">
+                                        {% for order in current_shift_orders_list %}
+                                        <tr @click="viewOrder({{ order.id }})" class="border-b border-stone-50 hover:bg-stone-50/50 transition-colors cursor-pointer group">
+                                            <td class="p-6 text-stone-400 group-hover:text-stone-900 transition-colors">#{{ order.id }} <span class="block text-[10px] font-bold">{{ order.created_at|date:"H:i" }}</span></td>
+                                            <td class="p-6">{{ order.total_amount }} ₴</td>
+                                            <td class="p-6">
+                                                <span class="text-[10px] font-black uppercase tracking-wider {% if order.order_type == 'online' %}text-brand-terracotta{% else %}text-stone-400{% endif %}">
+                                                    {{ order.get_order_type_display }}
+                                                </span>
+                                            </td>
+                                            <td class="p-6">
+                                                <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase
+                                                    {% if order.status == 'paid' or order.status == 'completed' %}bg-brand-olive/10 text-brand-olive
+                                                    {% elif order.status == 'canceled' %}bg-brand-coral/10 text-brand-coral
+                                                    {% else %}bg-stone-100 text-stone-500{% endif %}">
+                                                    {{ order.get_status_display }}
+                                                </span>
+                                            </td>
+                                            <td class="p-6 text-right">
+                                                {% if order.status != 'canceled' %}
+                                                <button @click="cancelOrder({{ order.id }})" class="text-brand-coral hover:text-red-700 transition-colors"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="py-20 text-center bg-brand-paper rounded-[3rem] border-2 border-dashed border-stone-300">
+                        <i data-lucide="play-circle" class="w-16 h-16 mx-auto mb-6 text-stone-300"></i>
+                        <h3 class="text-2xl font-black text-stone-900 mb-2 tracking-tighter">Зміну не відкрито</h3>
+                        <p class="font-bold text-stone-500 mb-8">Сформуйте меню та відкрийте продажі, щоб почати роботу.</p>
+                        <button @click="showCreateShiftModal = true" class="px-10 py-4 bg-brand-terracotta text-white font-black rounded-2xl shadow-lg shadow-brand-terracotta/20 transition-transform active:scale-95">ВІДКРИТИ ЗМІНУ</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+
+
+                <!-- ORDERS TAB -->
+                <div x-show="adminTab === 'orders'" x-transition>
+                    <div class="bg-white rounded-[3rem] border border-stone-200 shadow-sm overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-stone-50 text-stone-400 font-bold text-xs uppercase tracking-widest">
+                                <tr><th class="p-6">ID</th><th class="p-6">Час</th><th class="p-6">Клієнт</th><th class="p-6">Тип</th><th class="p-6">Сума</th><th class="p-6">Статус</th><th class="p-6 text-right">Дія</th></tr>
+                            </thead>
+                            <tbody class="font-bold text-stone-800">
+                                {% for order in all_orders %}
+                                <tr @click="viewOrder({{ order.id }})" class="border-b border-stone-50 hover:bg-stone-50/50 transition-colors cursor-pointer group">
+                                    <td class="p-6 text-stone-400 group-hover:text-stone-900 transition-colors">#{{ order.id }}</td>
+                                    <td class="p-6">{{ order.created_at|date:"H:i (d.m)" }}</td>
+                                    <td class="p-6">{{ order.user.username|default:"Гість" }}</td>
+                                    <td class="p-6 text-xs uppercase tracking-wider text-stone-500">{{ order.get_order_type_display }}</td>
+                                    <td class="p-6 font-black text-brand-terracotta">{{ order.total_amount }} ₴</td>
+                                    <td class="p-6">
+                                        <span class="px-2 py-1 rounded text-[10px] font-black uppercase
+                                            {% if order.status == 'paid' or order.status == 'completed' %}bg-brand-olive/10 text-brand-olive
+                                            {% elif order.status == 'canceled' %}bg-brand-coral/10 text-brand-coral
+                                            {% else %}bg-stone-100 text-stone-500{% endif %}">
+                                            {{ order.get_status_display }}
+                                        </span>
+                                    </td>
+                                    <td class="p-6 text-right">
+                                        {% if order.status != 'canceled' %}
+                                        <button @click="cancelOrder({{ order.id }})" class="text-brand-coral hover:underline text-sm font-bold flex items-center ml-auto"><i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Скасувати</button>
+                                        {% endif %}
+                                    </td>
                                 </tr>
-                                {% empty %}
-                                <tr><td colspan="3" class="py-10 text-center text-stone-400">Вітрина порожня. Поповніть товар.</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
-                        {% endif %}
-                    </div> <!-- End Active Shift State -->
+                    </div>
+                </div>
 
-                    <!-- Past Shifts -->
-                    <h2 class="text-2xl font-black text-stone-900 tracking-tighter mb-6">Історія змін</h2>
-                    <table class="w-full text-left">
-                        <thead><tr class="text-stone-400 text-xs font-bold uppercase tracking-widest border-b border-stone-200/60"><th class="pb-4">№</th><th class="pb-4">Касир</th><th class="pb-4">Час</th><th class="pb-4">Статус</th><th class="pb-4 text-right">Сума</th></tr></thead>
-                        <tbody class="font-bold text-stone-800">
-                            {% for shift in shifts %}
-                            <tr class="border-b border-stone-100/50">
-                                <td class="py-4 text-stone-500">#{{ shift.id }}</td>
-                                <td class="py-4">{{ shift.responsible_staff.username }}</td>
-                                <td class="py-4 text-stone-500">{{ shift.start_time|date:"d.m H:i" }}</td>
-                                <td class="py-4">
-                                    <span class="text-xs uppercase {% if shift.status == 'open' %}text-brand-olive{% else %}text-stone-400{% endif %}">
-                                        {{ shift.get_status_display }}
-                                    </span>
-                                </td>
-                                <td class="py-4 text-right">{% if shift.status == 'closed' %}{{ shift.initial_cash }} ₴{% else %}—{% endif %}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <!-- HISTORY TAB -->
+                <div x-show="adminTab === 'history'" x-transition>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {% for s in past_shifts %}
+                        <div @click="viewShift({{ s.id }})" class="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm flex flex-col hover:border-brand-terracotta transition-all cursor-pointer group hover:shadow-md">
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center font-black text-stone-400 group-hover:bg-brand-terracotta/10 group-hover:text-brand-terracotta transition-colors">#{{ s.id }}</div>
+                                <div class="text-right"><div class="text-xs text-stone-400 uppercase font-black">Дата</div><div class="text-lg font-black text-stone-900">{{ s.start_time|date:"d.m.Y" }}</div></div>
+                            </div>
+                            <div class="space-y-4 mb-6">
+                                <div class="flex justify-between items-end"><span class="text-stone-500 font-bold text-sm">Час роботи</span><span class="font-bold text-stone-900">{{ s.start_time|date:"H:i" }} — {{ s.end_time|date:"H:i" }}</span></div>
+                                <div class="flex justify-between items-end"><span class="text-stone-500 font-bold text-sm">Замовлень</span><span class="font-bold text-stone-900">{{ s.orders.count }} чеків</span></div>
+                            </div>
+                            <div class="pt-4 border-t border-stone-100 flex justify-between items-center">
+                                <span class="text-xs font-black text-stone-400 uppercase tracking-widest">Виручка</span>
+                                <span class="text-xl font-black text-brand-olive">
+                                    {% with total=s.orders.all|dictsort:"total_amount" %}
+                                        {# Note: calculation in template is limited, showing simple summary #}
+                                        {{ s.initial_cash }} ₴
+                                    {% endwith %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- HISTORY DETAIL VIEW -->
+                <div x-show="adminTab === 'history-detail'" x-transition style="display:none">
+                    <template x-if="historyShift">
+                        <div class="space-y-10">
+                            <!-- Header Info -->
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <button @click="adminTab = 'history'" class="flex items-center text-stone-400 hover:text-stone-900 font-bold mb-4 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Назад до списку</button>
+                                    <h2 class="text-5xl font-black text-stone-900 tracking-tighter">Зміна #<span x-text="historyShift.id"></span></h2>
+                                    <p class="text-xl font-bold text-stone-500" x-text="new Date(historyShift.start_time).toLocaleDateString('uk-UA')"></p>
+                                </div>
+                                <div class="flex space-x-10 text-right">
+                                    <div><div class="text-stone-400 font-bold text-xs uppercase mb-1">Виручка</div><div class="text-4xl font-black text-brand-olive" x-text="historyShift.revenue + ' ₴'"></div></div>
+                                    <div class="pl-10 border-l border-stone-200 text-left"><div class="text-stone-400 font-bold text-xs uppercase mb-1">Готівка (Початок)</div><div class="text-2xl font-black text-stone-900" x-text="historyShift.initial_cash + ' ₴'"></div></div>
+                                    <div class="pl-10 border-l border-stone-200 text-left"><div class="text-stone-400 font-bold text-xs uppercase mb-1">Очікувано в касі</div><div class="text-2xl font-black text-brand-olive" x-text="historyShift.expected_cash + ' ₴'"></div></div>
+                                    <div><div class="text-stone-400 font-bold text-xs uppercase mb-1">Чеків</div><div class="text-4xl font-black text-stone-900" x-text="historyShift.orders_count"></div></div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 xl:grid-cols-3 gap-10">
+                                <!-- Order List -->
+                                <div class="xl:col-span-2 bg-white rounded-[3rem] border border-stone-200 shadow-sm overflow-hidden">
+                                    <div class="p-8 border-b border-stone-100"><h3 class="text-2xl font-black text-stone-900 tracking-tight">Історія замовлень</h3></div>
+                                    <table class="w-full text-left">
+                                        <thead class="bg-stone-50 text-stone-400 font-bold text-xs uppercase tracking-widest">
+                                            <tr><th class="p-6">ID</th><th class="p-6">Час</th><th class="p-6">Тип</th><th class="p-6">Сума</th><th class="p-6">Статус</th></tr>
+                                        </thead>
+                                        <tbody class="font-bold text-stone-800">
+                                            <template x-for="order in historyShift.orders" :key="order.id">
+                                                <tr @click="viewOrder(order.id)" class="border-b border-stone-50 hover:bg-stone-50/50 transition-colors cursor-pointer group">
+                                                    <td class="p-6 text-stone-400 group-hover:text-stone-900 transition-colors" x-text="'#' + order.id"></td>
+                                                    <td class="p-6" x-text="new Date(order.created_at).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'})"></td>
+                                                    <td class="p-6">
+                                                        <span :class="order.order_type === 'online' ? 'text-brand-terracotta' : 'text-stone-400'" class="text-[10px] font-black uppercase tracking-wider" x-text="order.order_type_display"></span>
+                                                    </td>
+                                                    <td class="p-6" x-text="order.total_amount + ' ₴'"></td>
+                                                    <td class="p-6">
+                                                        <span :class="order.status === 'canceled' ? 'bg-brand-coral/10 text-brand-coral' : 'bg-brand-olive/10 text-brand-olive'" class="px-2 py-1 rounded text-[10px] font-black uppercase" x-text="order.status"></span>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Menu & Write-offs -->
+                                <div class="space-y-10">
+                                    <div class="bg-brand-paper rounded-[3rem] p-8 border border-stone-200">
+                                        <h3 class="text-xl font-black text-stone-900 mb-6 flex items-center"><i data-lucide="refresh-cw" class="w-5 h-5 mr-3"></i> Історія поповнень</h3>
+                                        <div class="space-y-4">
+                                            <template x-for="rep in historyShift.replenishments">
+                                                <div class="flex justify-between items-center pb-4 border-b border-stone-200/50">
+                                                    <div>
+                                                        <div class="font-bold text-stone-800" x-text="rep.dish_name"></div>
+                                                        <div class="text-[10px] text-stone-400 uppercase font-black" x-text="new Date(rep.created_at).toLocaleTimeString('uk-UA')"></div>
+                                                    </div>
+                                                    <div class="text-lg font-black text-brand-olive" x-text="'+' + rep.quantity"></div>
+                                                </div>
+                                            </template>
+                                            <template x-if="historyShift.replenishments.length === 0"><p class="text-stone-400 font-bold text-sm text-center py-4">Поповнень не було</p></template>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-brand-paper rounded-[3rem] p-8 border border-stone-200">
+                                        <h3 class="text-xl font-black text-stone-900 mb-6 flex items-center"><i data-lucide="utensils-cross" class="w-5 h-5 mr-3"></i> Списані залишки</h3>
+                                        <div class="space-y-4">
+                                            <template x-for="wo in historyShift.write_offs">
+                                                <div class="flex justify-between items-center pb-4 border-b border-stone-200/50">
+                                                    <div>
+                                                        <div class="font-bold text-stone-800" x-text="wo.dish_name"></div>
+                                                        <div class="text-[10px] text-stone-400 uppercase font-black" x-text="wo.reason"></div>
+                                                    </div>
+                                                    <div class="text-lg font-black text-brand-coral" x-text="'-' + wo.quantity"></div>
+                                                </div>
+                                            </template>
+                                            <template x-if="historyShift.write_offs.length === 0"><p class="text-stone-400 font-bold text-sm text-center py-4">Списань не було</p></template>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
 
                 <!-- MENU EDITOR -->
                 <div x-show="adminTab === 'menu'" x-transition class="h-full flex flex-col" style="display: none;">
                     <div class="flex flex-1 overflow-hidden">
                         <div class="w-[35%] border-r border-stone-200/60 pr-10 flex flex-col">
-                            <div class="mb-6 shrink-0">
-                                <div class="relative mb-4">
+                            <div class="mb-6 shrink-0 flex justify-between items-center">
+                                <div class="relative flex-1 mr-4">
                                     <i data-lucide="search" class="absolute left-0 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5"></i>
-                                    <input type="text" placeholder="Пошук страви..." class="w-full bg-transparent border-b-2 border-stone-300 text-lg font-bold text-stone-900 pl-8 pb-2 focus:border-brand-terracotta outline-none transition-colors">
+                                    <input type="text" placeholder="Пошук..." class="w-full bg-transparent border-b-2 border-stone-300 text-lg font-bold text-stone-900 pl-8 pb-2 focus:border-brand-terracotta outline-none transition-colors">
                                 </div>
+                                <button @click="selectedDish = {name: '', price: 0, category: 'Другі страви', description: ''}; isNewDish = true; showDishForm = true" class="p-2 bg-brand-terracotta text-white rounded-xl shadow-lg shadow-brand-terracotta/20"><i data-lucide="plus" class="w-6 h-6"></i></button>
                             </div>
                             <div class="flex-1 overflow-y-auto pr-2 space-y-4">
-                                <div class="flex items-center p-3 rounded-2xl bg-brand-paper border border-stone-200 cursor-pointer shadow-sm">
-                                    <img src="https://images.unsplash.com/photo-1547592180-85f173990554?w=100&h=100&fit=crop" class="w-12 h-12 rounded-xl object-cover mr-4">
-                                    <div class="flex-1"><div class="font-bold text-stone-900">Борщ український</div><div class="font-black text-brand-terracotta text-sm">55 ₴</div></div>
-                                    <div class="flex flex-col items-center ml-2"><span class="text-[9px] font-bold text-brand-olive mt-1 uppercase">В меню</span></div>
-                                </div>
-                                <div class="flex items-center p-3 rounded-2xl hover:bg-brand-paper border border-transparent hover:border-stone-200 cursor-pointer transition-colors">
-                                    <div class="w-12 h-12 rounded-xl bg-brand-terracotta/10 flex items-center justify-center mr-4 text-brand-terracotta">
-                                        <i data-lucide="layers" class="w-6 h-6"></i>
+                                {% for dish in dishes %}
+                                <div @click="selectedDish = {id: {{ dish.id }}, name: '{{ dish.name }}', price: '{{ dish.price|stringformat:'.0f' }}', category: '{{ dish.category }}', description: '{{ dish.description|escapejs }}', image_url: '{% if dish.image %}{{ dish.image.url }}{% endif %}'}; isNewDish = false; showDishForm = true" 
+                                     :class="selectedDish && selectedDish.id === {{ dish.id }} ? 'bg-brand-paper border-stone-200 shadow-sm' : 'hover:bg-brand-paper border-transparent'"
+                                     class="flex items-center p-3 rounded-2xl border cursor-pointer transition-colors">
+                                    <div class="w-12 h-12 rounded-xl bg-brand-terracotta/10 flex items-center justify-center mr-4 text-brand-terracotta font-black overflow-hidden">
+                                        {% if dish.image %}
+                                        <img src="{{ dish.image.url }}" class="w-full h-full object-cover">
+                                        {% else %}
+                                        {{ dish.name|slice:":1" }}
+                                        {% endif %}
                                     </div>
-                                    <div class="flex-1"><div class="font-bold text-stone-900">Комплекс "Стандарт"</div><div class="font-black text-brand-terracotta text-sm">120 ₴</div></div>
-                                    <span class="text-[9px] font-bold text-stone-400 uppercase">Комплекс</span>
+                                    <div class="flex-1"><div class="font-bold text-stone-900">{{ dish.name }}</div><div class="font-black text-brand-terracotta text-sm">{{ dish.price|stringformat:".0f" }} ₴</div></div>
+                                    <div class="flex flex-col items-center ml-2"><span class="text-[9px] font-bold text-stone-400 mt-1 uppercase">{{ dish.category }}</span></div>
                                 </div>
+                                {% endfor %}
                             </div>
                         </div>
-                        <div class="w-[65%] pl-10 overflow-y-auto pb-10 flex flex-col" x-data="{ isComplex: false }">
-                            <div class="flex justify-between items-center mb-8 shrink-0">
-                                <h2 class="text-3xl font-black text-stone-900 tracking-tighter">Редагування страви</h2>
-                                <div class="flex space-x-6">
-                                    <label class="flex items-center cursor-pointer">
-                                        <input type="checkbox" x-model="isComplex" class="sr-only toggle-checkbox">
-                                        <div class="relative">
-                                            <div class="block bg-stone-300 w-12 h-7 rounded-full toggle-label transition-colors"></div>
-                                            <div class="dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition transform"></div>
+                        <div class="w-[65%] pl-10 overflow-y-auto pb-10 flex flex-col">
+                            <template x-if="showDishForm && selectedDish">
+                                <div class="flex flex-col h-full">
+                                    <div class="flex justify-between items-center mb-8 shrink-0">
+                                        <h2 class="text-3xl font-black text-stone-900 tracking-tighter" x-text="isNewDish ? 'Нова страва' : 'Редагування страви'"></h2>
+                                        <div class="flex space-x-6">
+                                            <span class="font-bold text-stone-400 text-sm" x-show="!isNewDish">ID: <span x-text="selectedDish.id"></span></span>
                                         </div>
-                                        <span class="ml-3 font-bold text-stone-600 text-sm">Це комплексний обід</span>
-                                    </label>
-                                    <label class="flex items-center cursor-pointer">
-                                        <input type="checkbox" class="sr-only toggle-checkbox" checked>
-                                        <div class="relative">
-                                            <div class="block bg-stone-300 w-12 h-7 rounded-full toggle-label transition-colors"></div>
-                                            <div class="dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition transform"></div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-10 shrink-0">
+                                        <div class="aspect-square bg-stone-100 rounded-3xl overflow-hidden relative border-2 border-dashed border-stone-300 group">
+                                            <template x-if="selectedDish.image_url">
+                                                <img :src="selectedDish.image_url" class="w-full h-full object-cover">
+                                            </template>
+                                            <template x-if="!selectedDish.image_url">
+                                                <div class="absolute inset-0 flex flex-col items-center justify-center text-stone-300">
+                                                    <i data-lucide="image" class="w-16 h-16 mb-2"></i>
+                                                    <span class="font-bold">Фото відсутнє</span>
+                                                </div>
+                                            </template>
+                                            <label class="absolute inset-0 bg-stone-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                                                <i data-lucide="upload-cloud" class="text-white w-10 h-10"></i>
+                                                <input type="file" id="dish_image_input" class="hidden" accept="image/*" @change="if($event.target.files[0]) selectedDish.image_url = URL.createObjectURL($event.target.files[0])">
+                                            </label>
                                         </div>
-                                        <span class="ml-3 font-bold text-stone-600 text-sm">В меню</span>
-                                    </label>
+                                        <div class="flex flex-col justify-center space-y-6">
+                                            <div>
+                                                <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Назва страви</label>
+                                                <input type="text" x-model="selectedDish.name" class="w-full bg-transparent border-b-2 border-stone-300 text-2xl font-black text-stone-900 pb-2 outline-none focus:border-brand-terracotta transition-colors">
+                                            </div>
+                                            <div>
+                                                <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Категорія</label>
+                                                <select x-model="selectedDish.category" class="w-full bg-transparent border-b-2 border-stone-300 text-lg font-bold text-stone-900 pb-2 outline-none focus:border-brand-terracotta transition-colors">
+                                                    <option>Перші страви</option>
+                                                    <option>Другі страви</option>
+                                                    <option>Гарніри</option>
+                                                    <option>Салати</option>
+                                                    <option>Напої</option>
+                                                    <option>Десерти</option>
+                                                </select>
+                                            </div>
+                                            <div><label class="block text-stone-400 font-bold text-xs uppercase mb-2">Ціна (₴)</label><input type="number" x-model="selectedDish.price" class="w-full bg-transparent border-b-2 border-stone-300 text-3xl font-black text-brand-terracotta pb-1 outline-none"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-8">
+                                        <label class="block text-stone-400 font-bold text-xs uppercase mb-2">Опис (склад)</label>
+                                        <textarea x-model="selectedDish.description" rows="3" class="w-full bg-stone-50 border-2 border-stone-200 rounded-2xl p-4 font-bold text-stone-700 outline-none focus:border-brand-terracotta transition-colors" placeholder="Напишіть склад страви..."></textarea>
+                                    </div>
+                                    <div class="mt-auto pt-10 flex justify-end space-x-4">
+                                        <button @click="showDishForm = false" class="px-8 py-4 font-bold text-stone-400">Скасувати</button>
+                                        <button @click="saveDish()" class="px-8 py-4 bg-brand-terracotta text-white font-black text-lg rounded-2xl transition-transform active:scale-95 shadow-lg shadow-brand-terracotta/20 flex items-center">
+                                            <i data-lucide="save" class="w-5 h-5 mr-3"></i> ЗБЕРЕГТИ
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-10 shrink-0">
-                                <div class="aspect-square bg-stone-200/50 rounded-3xl overflow-hidden relative border-2 border-dashed border-stone-300">
-                                    <img src="https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=600&q=80" class="absolute inset-0 w-full h-full object-cover">
-                                    <button class="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-xl shadow-lg hover:text-brand-terracotta transition-colors"><i data-lucide="image-plus" class="w-5 h-5"></i></button>
+                            </template>
+                            <template x-if="!showDishForm">
+                                <div class="flex-1 flex flex-col items-center justify-center text-center text-stone-400">
+                                    <i data-lucide="utensils-cross" class="w-16 h-16 mb-4 opacity-20"></i>
+                                    <p class="text-xl font-bold">Оберіть страву або<br>натисніть + для створення нової</p>
                                 </div>
-                                <div class="flex flex-col justify-center space-y-8">
-                                    <div>
-                                        <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Назва страви</label>
-                                        <input type="text" value="Борщ український" class="w-full bg-transparent border-b-2 border-stone-300 text-3xl font-black text-stone-900 pb-2 outline-none focus:border-brand-terracotta transition-colors">
-                                    </div>
-                                    <div>
-                                        <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Категорія</label>
-                                        <select class="w-full bg-transparent border-b-2 border-stone-300 text-xl font-bold text-stone-900 pb-2 outline-none focus:border-brand-terracotta transition-colors">
-                                            <option>Перші страви</option>
-                                            <option>Другі страви</option>
-                                            <option>Гарніри</option>
-                                        </select>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-6">
-                                        <div><label class="block text-stone-400 font-bold text-xs uppercase mb-2">Собівартість (₴)</label><input type="number" value="16.50" class="w-full bg-transparent border-b-2 border-stone-300 text-2xl font-black text-stone-500 pb-2 outline-none"></div>
-                                        <div><label class="block text-stone-400 font-bold text-xs uppercase mb-2">Ціна продажу (₴)</label><input type="number" value="55.00" class="w-full bg-transparent border-b-2 border-stone-300 text-3xl font-black text-brand-terracotta pb-1 outline-none"></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Complex Components Selection -->
-                            <div x-show="isComplex" x-transition class="mt-10 p-8 bg-stone-100 rounded-3xl border border-stone-200">
-                                <h3 class="font-black text-stone-900 text-xl tracking-tight mb-4 flex items-center">
-                                    <i data-lucide="layers" class="w-5 h-5 mr-2 text-brand-terracotta"></i> Склад комплексного обіду
-                                </h3>
-                                <p class="text-sm font-bold text-stone-500 mb-6">При продажу цього комплексу система автоматично спише вказані нижче страви з вітрини.</p>
-                                
-                                <div class="space-y-3">
-                                    <div class="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
-                                        <span class="font-bold text-stone-800">Борщ український</span>
-                                        <button class="text-brand-coral hover:bg-brand-coral/10 p-2 rounded-lg transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                    </div>
-                                    <div class="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
-                                        <span class="font-bold text-stone-800">Картопляне пюре</span>
-                                        <button class="text-brand-coral hover:bg-brand-coral/10 p-2 rounded-lg transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                                    </div>
-                                    <button class="w-full py-4 border-2 border-dashed border-stone-300 rounded-2xl text-stone-400 font-bold hover:border-brand-terracotta hover:text-brand-terracotta transition-colors flex items-center justify-center">
-                                        <i data-lucide="plus" class="w-5 h-5 mr-2"></i> Додати компоненту
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="mt-10 pt-10 flex justify-end shrink-0 border-t border-stone-200/60">
-                                <button class="px-8 py-4 bg-brand-terracotta text-white font-black text-lg rounded-2xl transition-transform active:scale-95 shadow-lg shadow-brand-terracotta/20 flex items-center">
-                                    <i data-lucide="save" class="w-5 h-5 mr-3"></i> ЗБЕРЕГТИ ЗМІНИ
-                                </button>
-                            </div>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -382,7 +642,7 @@
                             <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-2">Співробітники</h2>
                             <p class="font-bold text-stone-500">Керування доступами та касами</p>
                         </div>
-                        <button class="px-6 py-3 bg-stone-800 text-white font-bold rounded-2xl transition-all active:scale-95 flex items-center shadow-lg"><i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Додати співробітника</button>
+                        <button @click="window.location.href='/admin/users/user/add/'" class="px-6 py-3 bg-stone-800 text-white font-bold rounded-2xl transition-all active:scale-95 flex items-center shadow-lg"><i data-lucide="user-plus" class="w-5 h-5 mr-2"></i> Додати співробітника</button>
                     </div>
                     <div class="bg-white rounded-3xl border border-stone-200 overflow-hidden">
                         <table class="w-full text-left">
@@ -468,7 +728,7 @@
                 <div class="p-8 border-b border-stone-200/60 bg-brand-cream flex justify-between items-start">
                     <div>
                         <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-1">Поповнення вітрини</h2>
-                        <p class="font-bold text-stone-500">Зміна #105 · Додати приготовлені порції</p>
+                        <p class="font-bold text-stone-500">Додати приготовлені порції до поточної зміни</p>
                     </div>
                     <button @click="showReplenishModal = false" class="w-10 h-10 rounded-full bg-stone-200/50 flex items-center justify-center text-stone-500"><i data-lucide="x" class="w-5 h-5"></i></button>
                 </div>
@@ -477,15 +737,28 @@
                         <table class="w-full text-left">
                             <thead class="bg-stone-50 border-b border-stone-200 text-stone-400 text-xs font-bold uppercase tracking-widest"><tr><th class="p-4">Страва</th><th class="p-4">Зараз</th><th class="p-4 text-center">Додати</th></tr></thead>
                             <tbody class="font-bold text-stone-800 text-lg divide-y divide-stone-100">
-                                <tr><td class="p-4">Борщ український</td><td class="p-4 text-stone-500">8 порц.</td><td class="p-4"><div class="flex items-center justify-center space-x-3"><button class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button><span class="w-8 text-center font-black text-xl">10</span><button class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button></div></td></tr>
-                                <tr><td class="p-4">Салат Грецький</td><td class="p-4 text-brand-coral">2 порц.</td><td class="p-4"><div class="flex items-center justify-center space-x-3"><button class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button><span class="w-8 text-center font-black text-xl">0</span><button class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button></div></td></tr>
+                                <template x-for="item in replenishList" :key="item.id">
+                                    <tr>
+                                        <td class="p-4" x-text="item.name"></td>
+                                        <td class="p-4 text-stone-500" x-text="item.current + ' порц.'"></td>
+                                        <td class="p-4">
+                                            <div class="flex items-center justify-center space-x-3">
+                                                <button @click="if(item.add > 0) item.add--" class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                                                <input type="number" x-model.number="item.add" class="w-12 text-center font-black text-xl text-stone-900 bg-transparent border-b-2 border-stone-300 outline-none">
+                                                <button @click="item.add++" class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
                 </div>
                 <div class="p-8 pt-0 flex justify-end space-x-4">
                     <button @click="showReplenishModal = false" class="px-6 py-3 text-stone-500 font-bold">Скасувати</button>
-                    <button @click="showReplenishModal = false" class="px-8 py-3 bg-brand-olive text-white font-black rounded-xl shadow-lg shadow-brand-olive/20">ПРИЙНЯТИ ТОВАР</button>
+                    <button @click="replenishShowcase()" class="px-8 py-3 bg-brand-olive text-white font-black rounded-xl shadow-lg shadow-brand-olive/20 flex items-center">
+                        <i data-lucide="check" class="w-5 h-5 mr-2"></i> ПІДТВЕРДИТИ ПОПОВНЕННЯ
+                    </button>
                 </div>
             </div>
         </div>
@@ -540,11 +813,25 @@
                                     <tr><th class="p-4">Страва</th><th class="p-4 text-center">К-сть порцій</th></tr>
                                 </thead>
                                 <tbody class="font-bold text-stone-800 divide-y divide-stone-100">
-                                    <tr class="bg-brand-terracotta/[0.02]"><td class="p-4 flex items-center">Борщ український <span class="ml-2 text-[10px] text-stone-400">300г/порц</span></td><td class="p-4"><div class="flex items-center justify-center space-x-3"><button class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button><input type="number" value="14" class="w-12 text-center font-black text-xl text-stone-900 bg-transparent border-b-2 border-stone-300 focus:border-brand-terracotta outline-none"><button class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button></div></td></tr>
-                                    <tr class="bg-brand-terracotta/[0.02]"><td class="p-4 flex items-center">Картопляне пюре <span class="ml-2 text-[10px] text-stone-400">200г/порц</span></td><td class="p-4"><div class="flex items-center justify-center space-x-3"><button class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button><input type="number" value="18" class="w-12 text-center font-black text-xl text-stone-900 bg-transparent border-b-2 border-stone-300 focus:border-brand-terracotta outline-none"><button class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button></div></td></tr>
-                                    <tr class="bg-brand-terracotta/[0.02]"><td class="p-4 flex items-center">Хліб домашній <span class="ml-2 text-[10px] text-stone-400">50г/шт</span></td><td class="p-4"><div class="flex items-center justify-center space-x-3"><button class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center"><i data-lucide="minus" class="w-4 h-4"></i></button><input type="number" value="50" class="w-12 text-center font-black text-xl text-stone-900 bg-transparent border-b-2 border-stone-300 focus:border-brand-terracotta outline-none"><button class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4"></i></button></div></td></tr>
-                                    <tr class="opacity-40 grayscale"><td class="p-4 flex items-center">Котлета по-київськи <span class="ml-2 text-[10px] text-stone-400">150г/шт</span></td><td class="p-4 text-center"><button class="px-4 py-1.5 bg-stone-200 rounded-lg text-xs font-bold text-stone-600 hover:bg-brand-terracotta hover:text-white transition-colors">Додати в меню</button></td></tr>
-                                    <tr class="opacity-40 grayscale"><td class="p-4 flex items-center">Компот ягідний <span class="ml-2 text-[10px] text-stone-400">250мл/порц</span></td><td class="p-4 text-center"><button class="px-4 py-1.5 bg-stone-200 rounded-lg text-xs font-bold text-stone-600 hover:bg-brand-terracotta hover:text-white transition-colors">Додати в меню</button></td></tr>
+                                    <template x-for="item in shiftDishes" :key="item.id">
+                                        <tr class="bg-brand-terracotta/[0.02]">
+                                            <td class="p-4 flex items-center">
+                                                <span x-text="item.name"></span>
+                                                <span class="ml-2 text-[10px] text-stone-400" x-text="item.category"></span>
+                                            </td>
+                                            <td class="p-4">
+                                                <div class="flex items-center justify-center space-x-3">
+                                                    <button @click="if(item.qty > 0) item.qty--" class="w-8 h-8 rounded-lg bg-stone-200/60 text-stone-600 flex items-center justify-center">
+                                                        <i data-lucide="minus" class="w-4 h-4"></i>
+                                                    </button>
+                                                    <input type="number" x-model.number="item.qty" class="w-12 text-center font-black text-xl text-stone-900 bg-transparent border-b-2 border-stone-300 focus:border-brand-terracotta outline-none">
+                                                    <button @click="item.qty++" class="w-8 h-8 rounded-lg bg-brand-terracotta/10 text-brand-terracotta flex items-center justify-center">
+                                                        <i data-lucide="plus" class="w-4 h-4"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
                                 </tbody>
                             </table>
                         </div>
@@ -561,6 +848,93 @@
         </div>
 
     </div>
-    <script>lucide.createIcons();</script>
-</body>
+        <!-- ORDER DETAIL MODAL -->
+        <div x-show="showOrderDetail" class="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm" x-transition style="display: none;">
+            <div class="bg-brand-paper rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden" @click.away="showOrderDetail = false">
+                <template x-if="selectedOrder">
+                    <div class="flex flex-col h-full">
+                        <div class="p-8 border-b border-stone-200/60 flex justify-between items-start bg-brand-cream">
+                            <div>
+                                <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-1">Замовлення #<span x-text="selectedOrder.id"></span></h2>
+                                <p class="font-bold text-stone-500" x-text="new Date(selectedOrder.created_at).toLocaleString('uk-UA')"></p>
+                            </div>
+                            <button @click="showOrderDetail = false" class="w-10 h-10 rounded-full bg-stone-200/50 flex items-center justify-center text-stone-500"><i data-lucide="x" class="w-5 h-5"></i></button>
+                        </div>
+                        
+                        <div class="p-8 space-y-8 overflow-y-auto max-h-[70vh]">
+                            <!-- Status & Type -->
+                            <div class="grid grid-cols-2 gap-6">
+                                <div class="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
+                                    <div class="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Статус</div>
+                                    <div class="font-bold text-lg" x-text="selectedOrder.status"></div>
+                                </div>
+                                <div class="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
+                                    <div class="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Тип замовлення</div>
+                                    <div class="font-bold text-lg" x-text="selectedOrder.order_type_display"></div>
+                                </div>
+                            </div>
+
+                            <!-- Items -->
+                            <div class="space-y-4">
+                                <h3 class="text-lg font-black text-stone-900 uppercase tracking-tight">Склад замовлення</h3>
+                                <div class="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-stone-50 text-stone-400 text-[10px] font-black uppercase tracking-widest">
+                                            <tr><th class="px-6 py-4">Товар</th><th class="px-6 py-4 text-center">К-сть</th><th class="px-6 py-4 text-right">Ціна</th></tr>
+                                        </thead>
+                                        <tbody class="font-bold text-stone-800">
+                                            <template x-for="item in selectedOrder.items">
+                                                <tr class="border-b border-stone-50 last:border-0">
+                                                    <td class="px-6 py-4" x-text="item.item_name"></td>
+                                                    <td class="px-6 py-4 text-center" x-text="item.quantity"></td>
+                                                    <td class="px-6 py-4 text-right" x-text="item.price_fixed + ' ₴'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Totals & Payment -->
+                            <div class="bg-brand-paper rounded-2xl p-6 border border-stone-200 space-y-4">
+                                <div class="flex justify-between items-center text-stone-500 font-bold">
+                                    <span>Метод оплати</span>
+                                    <span class="text-stone-900 font-black uppercase" x-text="selectedOrder.payment_method"></span>
+                                </div>
+                                <template x-if="selectedOrder.payment_method === 'cash'">
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center text-stone-500 font-bold">
+                                            <span>Отримано</span>
+                                            <span class="text-stone-900" x-text="selectedOrder.amount_received + ' ₴'"></span>
+                                        </div>
+                                        <div class="flex justify-between items-center text-stone-500 font-bold">
+                                            <span>Решта</span>
+                                            <span class="text-brand-olive" x-text="selectedOrder.change_amount + ' ₴'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div class="pt-4 border-t border-stone-200 flex justify-between items-center">
+                                    <span class="text-xl font-black text-stone-900 uppercase">Разом</span>
+                                    <span class="text-3xl font-black text-brand-terracotta" x-text="selectedOrder.total_amount + ' ₴'"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-8 bg-brand-cream border-t border-stone-200 flex justify-end space-x-4">
+                            <button @click="showOrderDetail = false" class="px-6 py-3 font-bold text-stone-500">Закрити</button>
+                            <template x-if="selectedOrder.status !== 'canceled'">
+                                <button @click="cancelOrder(selectedOrder.id); showOrderDetail = false" class="px-8 py-3 bg-brand-coral text-white font-black rounded-xl shadow-lg shadow-brand-coral/20 flex items-center">
+                                    <i data-lucide="trash-2" class="w-5 h-5 mr-2"></i> СКАСУВАТИ ЗАМОВЛЕННЯ
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <script>
+            lucide.createIcons();
+        </script>
+    </body>
 </html>

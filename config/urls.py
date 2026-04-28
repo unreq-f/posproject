@@ -34,6 +34,9 @@ router.register(r'inventory', InventoryViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'order-items', OrderItemViewSet)
 
+from django.conf import settings
+from django.conf.urls.static import static
+
 urlpatterns = [
     path('', RoleBasedRedirectView.as_view(), name='index'),
     path('admin/', admin.site.urls),
@@ -48,3 +51,6 @@ urlpatterns = [
     path('client/', ClientMenuView.as_view(), name='client_menu'),
     path('dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -16,6 +16,10 @@ def close_shift(shift: Shift) -> Shift:
         if locked_shift.status == 'closed':
             return locked_shift
             
+        # ПЕРЕВІРКА: чи є незакриті замовлення
+        if locked_shift.orders.filter(status='pending').exists():
+            raise Exception("Неможливо закрити зміну: є незавершені замовлення. Видайте їх у POS-терміналі або зверніться до адміністратора для скасування.")
+            
         # Находим все нераспроданные позиции на витрине
         inventories = Inventory.objects.select_for_update().filter(
             shift=locked_shift,

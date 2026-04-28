@@ -38,7 +38,7 @@
       x-data="{ 
           posTab: 'menu', 
           showToast: false, 
-          shiftStep: '{% if shift %}done{% else %}waiting{% endif %}',
+          shiftStep: '{% if active_shift %}done{% else %}waiting{% endif %}',
           cart: [],
           get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
           addToCart(id, name, price) {
@@ -60,6 +60,8 @@
                       body: JSON.stringify({
                           order_type: 'offline',
                           payment_method: method,
+                          amount_received: method === 'cash' ? this.cashReceived : this.cartTotal,
+                          change_amount: method === 'cash' ? this.cashChange : 0,
                           items: this.cart.map(i => ({ dish: i.id, quantity: i.qty }))
                       })
                   });
@@ -85,17 +87,30 @@
               } catch (e) {
                   alert('Помилка мережі');
               }
-          }
+          },
+          async deliverOnlineOrder(orderId) {
+              if(!confirm('Позначити замовлення як видане?')) return;
+              try {
+                  const res = await fetch(`/api/orders/${orderId}/pay/`, {
+                      method: 'POST',
+                      headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+                  });
+                  if(res.ok) {
+                      alert('Замовлення видано!');
+                      window.location.reload();
+                  } else {
+                      const err = await res.json();
+                      alert('Помилка видачі: ' + (err.detail || 'Недостатньо продуктів на складі'));
+                  }
+              } catch(e) { alert('Помилка мережі'); }
+          },
+          showCashModal: false,
+          cashReceived: 0,
+          get cashChange() { return Math.max(0, this.cashReceived - this.cartTotal) }
       }">
     {% csrf_token %}
 
-    <!-- Debug Header for Dev -->
-    <div class="bg-stone-900 text-stone-400 p-2 flex justify-between px-6 z-50 shrink-0 text-xs font-bold">
-        <span>POS Термінал Касира</span>
-        <button @click="showToast = true; setTimeout(() => showToast = false, 5000)" class="border border-stone-700 px-2 rounded hover:bg-stone-800 text-stone-300">
-            Симуляція: +1 Онлайн Замовлення
-        </button>
-    </div>
+
 
     <!-- Header -->
     <header class="bg-brand-paper border-b border-stone-200/60 px-8 py-3 flex items-center justify-between shrink-0 z-20">
@@ -116,7 +131,9 @@
                 </button>
                 <button @click="posTab = 'online'" :class="{'bg-white shadow-sm text-brand-terracotta font-bold': posTab === 'online', 'text-stone-500 font-bold hover:text-stone-800': posTab !== 'online'}" class="px-8 py-2 rounded-lg transition-all flex items-center">
                     <i data-lucide="shopping-bag" class="w-4 h-4 mr-2"></i> Онлайн-видача
-                    <span class="ml-2 bg-brand-coral text-white text-[11px] font-black px-2 py-0.5 rounded-full animate-pulse">3</span>
+                    {% if online_orders.count > 0 %}
+                    <span class="ml-2 bg-brand-coral text-white text-[11px] font-black px-2 py-0.5 rounded-full animate-pulse">{{ online_orders.count }}</span>
+                    {% endif %}
                 </button>
             </div>
         </div>
@@ -150,8 +167,8 @@
                 <h1 class="text-5xl font-black text-stone-900 tracking-tighter mb-4">Очікування зміни</h1>
                 <p class="text-xl font-semibold text-stone-500 mb-12 leading-relaxed">Зміна ще не відкрита адміністратором.<br>Будь ласка, зачекайте на налаштування вітрини.</p>
                 <div class="text-7xl font-black text-stone-300 tracking-tighter mb-12" x-data="{ time: '' }" x-init="setInterval(() => { const d = new Date(); time = d.toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'}) }, 1000)" x-text="time"></div>
-                <button @click="shiftStep = 'welcome'; setTimeout(() => lucide.createIcons(), 50)" class="px-8 py-4 bg-stone-200 text-stone-500 font-bold text-lg rounded-2xl hover:bg-stone-300 transition-colors flex items-center justify-center w-full mx-auto max-w-xs">
-                    <i data-lucide="refresh-cw" class="w-5 h-5 mr-3"></i> Симуляція: Адмін відкрив
+                <button @click="window.location.reload()" class="px-8 py-4 bg-stone-200 text-stone-500 font-bold text-lg rounded-2xl hover:bg-stone-300 transition-colors flex items-center justify-center w-full mx-auto max-w-xs">
+                    <i data-lucide="refresh-cw" class="w-5 h-5 mr-3"></i> ОНОВИТИ СТАТУС
                 </button>
                 <p class="mt-8 text-sm font-bold text-stone-400">Касир: Олександр · Їдальня на Шевченка</p>
             </div>
@@ -241,7 +258,7 @@
         <aside class="w-[380px] bg-brand-paper border-r border-stone-200/60 flex flex-col shrink-0 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
             <div class="px-6 py-5 flex justify-between items-center border-b border-stone-200/50">
                 <h2 class="text-xl font-black text-stone-900 tracking-tight">Замовлення</h2>
-                <span class="text-sm font-bold text-stone-500">№ 000125</span>
+                <span class="text-sm font-bold text-stone-500">№ {{ next_order_id|stringformat:"06d" }}</span>
             </div>
 
             <div class="flex-1 overflow-y-auto px-6 py-2 space-y-1">
@@ -270,7 +287,7 @@
                     <span class="text-3xl font-black text-stone-900 tracking-tighter" x-text="cartTotal + ' ₴'"></span>
                 </div>
                 <div class="space-y-2 mb-4">
-                    <button @click="checkout('cash')" class="w-full py-3 px-5 bg-brand-olive hover:bg-[#3f660c] text-white rounded-xl font-bold text-base transition-colors flex justify-between items-center shadow-sm">
+                    <button @click="showCashModal = true; cashReceived = cartTotal" class="w-full py-3 px-5 bg-brand-olive hover:bg-[#3f660c] text-white rounded-xl font-bold text-base transition-colors flex justify-between items-center shadow-sm">
                         <span>Готівка</span><i data-lucide="banknote" class="w-5 h-5 opacity-50"></i>
                     </button>
                     <button @click="checkout('card')" class="w-full py-3 px-5 bg-brand-terracotta hover:bg-[#7c2a0e] text-white rounded-xl font-bold text-base transition-colors flex justify-between items-center shadow-sm">
@@ -347,40 +364,31 @@
                 <div class="flex-1 overflow-y-auto p-6">
                     <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 items-start">
                         
-                        <!-- Red Card -->
-                        <div class="bg-white rounded-xl shadow-sm border-2 border-brand-coral flex flex-col relative overflow-hidden">
-                            <div class="bg-brand-coral text-white px-3 py-2 flex justify-between items-center text-sm">
-                                <span class="font-black">#0452</span>
-                                <span class="font-bold flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> 12:30 (-5 хв)</span>
+                        {% for order in online_orders %}
+                        <div class="bg-white rounded-xl shadow-sm border-2 border-brand-terracotta/20 flex flex-col relative overflow-hidden">
+                            <div class="bg-brand-terracotta text-white px-3 py-2 flex justify-between items-center text-sm">
+                                <span class="font-black">#{{ order.id }}</span>
+                                <span class="font-bold flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> {{ order.pickup_time }}</span>
                             </div>
                             <div class="p-3 flex-1">
-                                <div class="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-2">Олена (095-***-12)</div>
+                                <div class="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-2">{{ order.user.username }}</div>
                                 <ul class="space-y-1.5 font-bold text-stone-800 text-xs">
-                                    <li class="flex items-start"><span class="text-brand-coral mr-1.5 w-4 font-black text-right shrink-0">2x</span><span class="leading-tight">Борщ український</span></li>
-                                    <li class="flex items-start"><span class="text-brand-coral mr-1.5 w-4 font-black text-right shrink-0">1x</span><span class="leading-tight">Картопляне пюре</span></li>
+                                    {% for item in order.items.all %}
+                                    <li class="flex items-start">
+                                        <span class="text-brand-terracotta mr-1.5 w-4 font-black text-right shrink-0">{{ item.quantity }}x</span>
+                                        <span class="leading-tight">{% if item.dish %}{{ item.dish.name }}{% else %}{{ item.combo.name }}{% endif %}</span>
+                                    </li>
+                                    {% endfor %}
                                 </ul>
                             </div>
                             <div class="p-2 border-t border-stone-100 bg-stone-50">
-                                <button class="w-full py-2.5 bg-brand-terracotta hover:bg-[#7c2a0e] text-white font-black text-sm rounded-lg shadow-sm transition-colors">ВИДАТИ</button>
+                                <button @click="deliverOnlineOrder({{ order.id }})" class="w-full py-2.5 bg-brand-olive hover:bg-[#3f660c] text-white font-black text-sm rounded-lg shadow-sm transition-colors">ВИДАТИ</button>
                             </div>
                         </div>
+                        {% empty %}
+                        <div class="col-span-full py-20 text-center text-stone-400 font-bold">Немає замовлень на видачу</div>
+                        {% endfor %}
 
-                        <!-- Mustard Card -->
-                        <div class="bg-white rounded-xl shadow-sm border-2 border-brand-mustard flex flex-col relative overflow-hidden">
-                            <div class="bg-brand-mustard text-white px-3 py-2 flex justify-between items-center text-sm">
-                                <span class="font-black">#0453</span>
-                                <span class="font-bold flex items-center animate-pulse"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> 12:45 (10 хв)</span>
-                            </div>
-                            <div class="p-3 flex-1">
-                                <div class="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-2">Максим</div>
-                                <ul class="space-y-1.5 font-bold text-stone-800 text-xs">
-                                    <li class="flex items-start"><span class="text-brand-mustard mr-1.5 w-4 font-black text-right shrink-0">1x</span><span class="leading-tight">Салат Грецький</span></li>
-                                </ul>
-                            </div>
-                            <div class="p-2 border-t border-stone-100 bg-stone-50">
-                                <button class="w-full py-2.5 bg-brand-terracotta hover:bg-[#7c2a0e] text-white font-black text-sm rounded-lg shadow-sm transition-colors">ВИДАТИ</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -392,6 +400,39 @@
                     <div>
                         <h4 class="font-bold text-sm leading-tight">Нове онлайн-замовлення</h4>
                         <p class="text-xs text-stone-400 font-medium mt-0.5">Сплачено. Видача о 13:45</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CASH MODAL -->
+            <div x-show="showCashModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/60 backdrop-blur-sm" x-transition style="display: none;">
+                <div class="bg-brand-paper rounded-3xl shadow-2xl max-w-md w-full overflow-hidden" @click.away="showCashModal = false">
+                    <div class="p-8 border-b border-stone-200/60 bg-brand-cream flex justify-between items-center">
+                        <h2 class="text-2xl font-black text-stone-900 tracking-tight">Оплата готівкою</h2>
+                        <button @click="showCashModal = false" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+                    </div>
+                    <div class="p-8 space-y-6">
+                        <div class="flex justify-between items-center text-stone-500 font-bold uppercase text-xs tracking-widest">
+                            <span>Сума до сплати</span>
+                            <span class="text-2xl font-black text-stone-900" x-text="cartTotal + ' ₴'"></span>
+                        </div>
+                        
+                        <div class="space-y-2">
+                            <label class="block text-stone-400 font-bold text-[10px] uppercase tracking-widest">Отримано від клієнта</label>
+                            <div class="relative">
+                                <input type="number" x-model.number="cashReceived" class="w-full bg-white border-2 border-stone-200 rounded-2xl p-5 text-4xl font-black text-stone-900 outline-none focus:border-brand-olive transition-colors" autofocus>
+                                <span class="absolute right-6 top-1/2 -translate-y-1/2 text-2xl font-black text-stone-300">₴</span>
+                            </div>
+                        </div>
+
+                        <div class="p-6 bg-brand-olive/10 rounded-2xl border border-brand-olive/20 flex justify-between items-center">
+                            <span class="text-brand-olive font-bold uppercase text-xs tracking-widest">Решта</span>
+                            <span class="text-4xl font-black text-brand-olive" x-text="cashChange + ' ₴'"></span>
+                        </div>
+                        
+                        <button @click="checkout('cash'); showCashModal = false" class="w-full py-5 bg-brand-olive hover:bg-[#3f660c] text-white font-black text-xl rounded-2xl shadow-lg shadow-brand-olive/20 transition-all active:scale-95">
+                            ЗАКРИТИ ЧЕК
+                        </button>
                     </div>
                 </div>
             </div>

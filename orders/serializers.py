@@ -2,10 +2,17 @@ from rest_framework import serializers
 from .models import Order, OrderItem
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    item_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = OrderItem
-        fields = ['dish', 'combo', 'quantity', 'price_fixed']
-        read_only_fields = ['price_fixed']
+        fields = ['dish', 'combo', 'item_name', 'quantity', 'price_fixed']
+        read_only_fields = ['price_fixed', 'item_name']
+
+    def get_item_name(self, obj):
+        if obj.dish: return obj.dish.name
+        if obj.combo: return obj.combo.name
+        return "Невідомий товар"
 
     def validate(self, data):
         dish = data.get('dish')
@@ -19,9 +26,11 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     
+    order_type_display = serializers.CharField(source='get_order_type_display', read_only=True)
+    
     class Meta:
         model = Order
-        fields = ['id', 'client', 'shift', 'status', 'order_type', 'payment_method', 'pickup_time', 'total_amount', 'created_at', 'items']
+        fields = ['id', 'client', 'shift', 'status', 'order_type', 'order_type_display', 'payment_method', 'pickup_time', 'total_amount', 'amount_received', 'change_amount', 'created_at', 'items']
         read_only_fields = ['shift', 'total_amount', 'created_at']
 
     def create(self, validated_data):
@@ -30,7 +39,7 @@ class OrderSerializer(serializers.ModelSerializer):
         # Автоматичний пошук активної зміни
         from canteen.models import Shift
         from menu.models import Inventory
-        active_shift = Shift.objects.filter(status='open').last()
+        active_shift = Shift.objects.filter(status='open').first()
         if not active_shift:
             raise serializers.ValidationError("Немає активної зміни. Замовлення неможливе.")
         
