@@ -247,6 +247,14 @@
                 <button @click="adminTab = 'menu'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'menu'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="utensils" class="w-5 h-5 mr-3 opacity-60"></i> Меню</button>
                 <button @click="adminTab = 'users'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'users'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors hover:text-stone-900"><i data-lucide="users" class="w-5 h-5 mr-3 opacity-60"></i> Персонал</button>
             </nav>
+
+            <div class="px-8 mb-6">
+                <div class="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-4">Швидкий перехід</div>
+                <div class="space-y-2">
+                    <a href="{% url 'pos' %}" class="flex items-center text-stone-600 hover:text-brand-terracotta font-bold text-sm transition-colors"><i data-lucide="monitor" class="w-4 h-4 mr-3 opacity-60"></i> POS Термінал</a>
+                    <a href="{% url 'client_menu' %}" class="flex items-center text-stone-600 hover:text-brand-terracotta font-bold text-sm transition-colors"><i data-lucide="smartphone" class="w-4 h-4 mr-3 opacity-60"></i> Мобільне меню</a>
+                </div>
+            </div>
             
             <div class="p-8 border-t border-stone-200/60">
                 <form method="POST" action="{% url 'logout' %}">

@@ -8,6 +8,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
@@ -34,6 +35,8 @@
     cart: [],
     selectedSlot: null,
     showCart: false,
+    activeCategory: 'all',
+    selectedProduct: null,
     slots: {{ time_slots|safe|default:"[]" }},
     get cartCount() { return this.cart.reduce((sum, item) => sum + item.qty, 0) },
     get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
@@ -82,12 +85,18 @@
             <i data-lucide="sun" class="w-7 h-7 mr-2 fill-current"></i>
             <span class="font-black text-xl tracking-tight uppercase">Їжачок</span>
         </div>
-        <button @click="showCart = true" class="relative p-2 bg-stone-100 rounded-xl">
-            <i data-lucide="shopping-basket" class="w-6 h-6 text-stone-600"></i>
-            <template x-if="cartCount > 0">
-                <span class="absolute -top-1 -right-1 bg-brand-coral text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white" x-text="cartCount"></span>
-            </template>
-        </button>
+        <div class="flex items-center space-x-2">
+            {% if request.user.role == 'admin' or request.user.role == 'staff' %}
+            <a href="{% url 'admin_dashboard' %}" class="p-2 text-stone-400 hover:text-brand-terracotta transition-colors"><i data-lucide="settings" class="w-5 h-5"></i></a>
+            <a href="{% url 'pos' %}" class="p-2 text-stone-400 hover:text-brand-terracotta transition-colors"><i data-lucide="monitor" class="w-5 h-5"></i></a>
+            {% endif %}
+            <button @click="showCart = true" class="relative p-2 bg-stone-100 rounded-xl ml-2">
+                <i data-lucide="shopping-basket" class="w-6 h-6 text-stone-600"></i>
+                <template x-if="cartCount > 0">
+                    <span class="absolute -top-1 -right-1 bg-brand-coral text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white" x-text="cartCount"></span>
+                </template>
+            </button>
+        </div>
     </header>
 
     <!-- Main Content -->
@@ -103,10 +112,11 @@
 
         <!-- Categories -->
         <div class="px-6 py-4 overflow-x-auto hide-scrollbar flex space-x-3 shrink-0">
-            <button class="px-5 py-2.5 bg-brand-terracotta text-white rounded-full font-bold text-sm shadow-lg shadow-brand-terracotta/20 whitespace-nowrap">Усе меню</button>
-            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Комплекси</button>
-            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Перші страви</button>
-            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Другі страви</button>
+            <button @click="activeCategory = 'all'" :class="activeCategory === 'all' ? 'bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20' : 'bg-white text-stone-500 border border-stone-200'" class="px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all">Усе меню</button>
+            <button @click="activeCategory = 'Комплекси'" :class="activeCategory === 'Комплекси' ? 'bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20' : 'bg-white text-stone-500 border border-stone-200'" class="px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all">Комплекси</button>
+            <button @click="activeCategory = 'Перші страви'" :class="activeCategory === 'Перші страви' ? 'bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20' : 'bg-white text-stone-500 border border-stone-200'" class="px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all">Перші страви</button>
+            <button @click="activeCategory = 'Другі страви'" :class="activeCategory === 'Другі страви' ? 'bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20' : 'bg-white text-stone-500 border border-stone-200'" class="px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all">Другі страви</button>
+            <button @click="activeCategory = 'Напої'" :class="activeCategory === 'Напої' ? 'bg-brand-terracotta text-white shadow-lg shadow-brand-terracotta/20' : 'bg-white text-stone-500 border border-stone-200'" class="px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all">Напої</button>
         </div>
 
         <!-- Menu Grid -->
@@ -126,7 +136,9 @@
 
             <!-- Complex Meals (Combos) -->
             {% for combo in combos %}
-            <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 relative overflow-hidden group">
+            <div x-show="activeCategory === 'all' || activeCategory === 'Комплекси'" 
+                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 relative overflow-hidden group active:scale-[0.98] transition-transform"
+                 @click="selectedProduct = { id: {{ combo.id }}, name: '{{ combo.name|escapejs }}', price: {{ combo.price }}, type: 'combo', description: '{% for item in combo.dishes.all %}{{ item.name }}{% if not forloop.last %} + {% endif %}{% endfor %}', image: null }">
                 <div class="absolute top-0 right-0 p-4">
                     <span class="bg-brand-terracotta text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Комплекс</span>
                 </div>
@@ -136,7 +148,7 @@
                     </div>
                     <div>
                         <h3 class="font-black text-xl text-stone-900 leading-tight">{{ combo.name }}</h3>
-                        <p class="text-stone-400 text-xs font-bold mt-1">
+                        <p class="text-stone-400 text-xs font-bold mt-1 line-clamp-1">
                             {% for item in combo.dishes.all %}{{ item.name }}{% if not forloop.last %} + {% endif %}{% endfor %}
                         </p>
                     </div>
@@ -145,7 +157,7 @@
                     <div>
                         <span class="text-2xl font-black text-brand-terracotta">{{ combo.price }} ₴</span>
                     </div>
-                    <button @click="addToCart({{ combo.id }}, '{{ combo.name }}', {{ combo.price }}, 'combo')" class="px-6 py-3 bg-stone-900 text-white font-black rounded-2xl active:scale-95 transition-transform flex items-center">
+                    <button @click.stop="addToCart({{ combo.id }}, '{{ combo.name|escapejs }}', {{ combo.price }}, 'combo')" class="px-6 py-3 bg-stone-900 text-white font-black rounded-2xl active:scale-95 transition-transform flex items-center">
                         <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Додати
                     </button>
                 </div>
@@ -154,9 +166,15 @@
 
             <!-- Single Dishes from Inventory -->
             {% for item in inventory %}
-            <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 flex space-x-4">
+            <div x-show="activeCategory === 'all' || activeCategory === '{{ item.dish.category|escapejs }}'" 
+                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 flex space-x-4 active:scale-[0.98] transition-transform"
+                 @click="selectedProduct = { id: {{ item.dish.id }}, name: '{{ item.dish.name|escapejs }}', price: {{ item.dish.price }}, type: 'dish', weight: '{{ item.dish.weight_info|escapejs }}', description: '{{ item.dish.description|escapejs }}', image: '{% if item.dish.image %}{{ item.dish.image.url }}{% endif %}' }">
                 <div class="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 flex items-center justify-center">
+                    {% if item.dish.image %}
+                    <img src="{{ item.dish.image.url }}" class="w-full h-full object-cover">
+                    {% else %}
                     <i data-lucide="utensils" class="text-stone-300 w-8 h-8"></i>
+                    {% endif %}
                 </div>
                 <div class="flex-1 flex flex-col justify-between">
                     <div>
@@ -165,7 +183,7 @@
                     </div>
                     <div class="flex justify-between items-center">
                         <span class="font-black text-brand-terracotta text-xl">{{ item.dish.price }} ₴</span>
-                        <button @click="addToCart({{ item.dish.id }}, '{{ item.dish.name }}', {{ item.dish.price }}, 'dish')" class="w-10 h-10 bg-stone-100 text-stone-900 rounded-xl flex items-center justify-center active:scale-90 transition-transform">
+                        <button @click.stop="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }}, 'dish')" class="w-10 h-10 bg-stone-100 text-stone-900 rounded-xl flex items-center justify-center active:scale-90 transition-transform">
                             <i data-lucide="plus" class="w-5 h-5"></i>
                         </button>
                     </div>
@@ -278,6 +296,54 @@
         </div>
 
         <button @click="step = 'menu'; cartCount = 0; selectedSlot = null" class="font-black text-brand-terracotta uppercase tracking-widest text-sm">Повернутися до меню</button>
+    </div>
+
+    <!-- Product Detail Modal -->
+    <div x-show="selectedProduct" class="fixed inset-0 z-[70] flex items-end justify-center" x-cloak x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+        <div class="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" @click="selectedProduct = null"></div>
+        <div class="bg-white w-full rounded-t-[3rem] relative z-10 max-h-[90vh] overflow-hidden flex flex-col shadow-2xl" 
+             x-show="selectedProduct"
+             x-transition:enter="transition ease-out duration-300 transform" 
+             x-transition:enter-start="translate-y-full" 
+             x-transition:enter-end="translate-y-0"
+             x-transition:leave="transition ease-in duration-200 transform"
+             x-transition:leave-start="translate-y-0"
+             x-transition:leave-end="translate-y-full">
+            
+            <button @click="selectedProduct = null" class="absolute top-6 right-6 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-stone-500 shadow-lg z-20"><i data-lucide="x" class="w-5 h-5"></i></button>
+            
+            <div class="h-64 shrink-0 bg-stone-100 relative">
+                <template x-if="selectedProduct?.image">
+                    <img :src="selectedProduct.image" class="w-full h-full object-cover">
+                </template>
+                <template x-if="!selectedProduct?.image">
+                    <div class="w-full h-full flex items-center justify-center text-stone-300">
+                        <i data-lucide="utensils" class="w-20 h-20"></i>
+                    </div>
+                </template>
+            </div>
+
+            <div class="p-8 flex-1 overflow-y-auto">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1 pr-4">
+                        <h2 class="text-3xl font-black text-stone-900 tracking-tighter" x-text="selectedProduct?.name"></h2>
+                        <p class="text-stone-400 font-bold" x-text="selectedProduct?.weight || ''"></p>
+                    </div>
+                    <div class="text-3xl font-black text-brand-terracotta whitespace-nowrap" x-text="selectedProduct?.price + ' ₴'"></div>
+                </div>
+                
+                <div class="bg-stone-50 rounded-2xl p-6 mb-8 border border-stone-100">
+                    <h4 class="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Склад та опис</h4>
+                    <p class="text-stone-700 font-bold leading-relaxed" x-text="selectedProduct?.description || 'Опис відсутній'"></p>
+                </div>
+            </div>
+
+            <div class="p-8 bg-brand-paper border-t border-stone-200">
+                <button @click="addToCart(selectedProduct.id, selectedProduct.name, selectedProduct.price, selectedProduct.type); selectedProduct = null" class="w-full py-5 bg-brand-terracotta text-white rounded-2xl font-black text-xl shadow-xl shadow-brand-terracotta/20 active:scale-95 transition-all flex items-center justify-center">
+                    <i data-lucide="plus" class="w-6 h-6 mr-3"></i> ДОДАТИ ДО КОШИКА
+                </button>
+            </div>
+        </div>
     </div>
 
     <script>lucide.createIcons();</script>
