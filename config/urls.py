@@ -18,10 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from users.views import UserViewSet
-from canteen.views import ShiftViewSet, WriteOffViewSet
-from menu.views import DishViewSet, ComboMealViewSet, MenuViewSet, InventoryViewSet
-from orders.views import OrderViewSet, OrderItemViewSet
+from django.contrib.auth import views as auth_views
+from users.views import UserViewSet, SignupView, RoleBasedRedirectView
+from canteen.views import ShiftViewSet, WriteOffViewSet, AdminDashboardView
+from menu.views import DishViewSet, ComboMealViewSet, InventoryViewSet
+from orders.views import OrderViewSet, OrderItemViewSet, POSView, ClientMenuView
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
@@ -29,12 +30,21 @@ router.register(r'shifts', ShiftViewSet)
 router.register(r'writeoffs', WriteOffViewSet)
 router.register(r'dishes', DishViewSet)
 router.register(r'combos', ComboMealViewSet)
-router.register(r'menus', MenuViewSet)
 router.register(r'inventory', InventoryViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'order-items', OrderItemViewSet)
 
 urlpatterns = [
+    path('', RoleBasedRedirectView.as_view(), name='index'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    
+    # Frontend Template Views
+    path('login/', auth_views.LoginView.as_view(template_name='users/login.html'), name='login'),
+    path('signup/', SignupView.as_view(), name='signup'),
+    path('redirect/', RoleBasedRedirectView.as_view(), name='role_redirect'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('pos/', POSView.as_view(), name='pos'),
+    path('client/', ClientMenuView.as_view(), name='client_menu'),
+    path('dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
 ]

@@ -23,6 +23,7 @@ class Order(models.Model):
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending')
     order_type = models.CharField(max_length=10, choices=ORDER_TYPE_CHOICES, default='offline')
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES)
+    pickup_time = models.CharField(max_length=50, blank=True, null=True, verbose_name="Час отримання (Time-slot)")
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     created_at = models.DateTimeField(auto_now_add=True)
 

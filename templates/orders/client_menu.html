@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Їжачок - Онлайн Замовлення</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Manrope', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            terracotta: '#9A3412', mustard: '#CA8A04', olive: '#4D7C0F', coral: '#EF4444',
+                            cream: '#FDFBF7', paper: '#F5F5F0',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Manrope', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-brand-cream text-stone-800 min-h-screen flex flex-col" x-data="{ 
+    step: 'menu', 
+    cart: [],
+    selectedSlot: null,
+    showCart: false,
+    slots: ['12:00 - 12:15', '12:15 - 12:30', '12:30 - 12:45', '12:45 - 13:00', '13:00 - 13:15'],
+    get cartCount() { return this.cart.reduce((sum, item) => sum + item.qty, 0) },
+    get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
+    addToCart(id, name, price, type) {
+        let item = this.cart.find(i => i.id === id && i.type === type);
+        if (item) { item.qty++ } else { this.cart.push({ id, name, price, type, qty: 1 }) }
+    },
+    async submitOrder() {
+        if (!this.selectedSlot || this.cart.length === 0) return;
+        try {
+            const response = await fetch('/api/orders/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    order_type: 'online',
+                    payment_method: 'card',
+                    pickup_time: this.selectedSlot,
+                    items: this.cart.map(i => ({
+                        dish: i.type === 'dish' ? i.id : null,
+                        combo: i.type === 'combo' ? i.id : null,
+                        quantity: i.qty
+                    }))
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.step = 'success';
+                this.showCart = false;
+            } else {
+                const err = await response.json();
+                alert('Помилка: ' + (err.detail || JSON.stringify(err)));
+            }
+        } catch (e) {
+            alert('Помилка мережі');
+        }
+    }
+}">
+    {% csrf_token %}
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 border-b border-stone-200/60 flex justify-between items-center">
+        <div class="flex items-center text-brand-terracotta">
+            <i data-lucide="sun" class="w-7 h-7 mr-2 fill-current"></i>
+            <span class="font-black text-xl tracking-tight uppercase">Їжачок</span>
+        </div>
+        <button @click="showCart = true" class="relative p-2 bg-stone-100 rounded-xl">
+            <i data-lucide="shopping-basket" class="w-6 h-6 text-stone-600"></i>
+            <template x-if="cartCount > 0">
+                <span class="absolute -top-1 -right-1 bg-brand-coral text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white" x-text="cartCount"></span>
+            </template>
+        </button>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 pb-24">
+        
+        <!-- Welcome & Location -->
+        <div class="px-6 pt-8 pb-4">
+            <h1 class="text-3xl font-black text-stone-900 tracking-tighter mb-1">Смачного обіду! 👋</h1>
+            <p class="text-stone-500 font-bold flex items-center text-sm">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1 text-brand-terracotta"></i> Їдальня на Шевченка
+            </p>
+        </div>
+
+        <!-- Categories -->
+        <div class="px-6 py-4 overflow-x-auto hide-scrollbar flex space-x-3 shrink-0">
+            <button class="px-5 py-2.5 bg-brand-terracotta text-white rounded-full font-bold text-sm shadow-lg shadow-brand-terracotta/20 whitespace-nowrap">Усе меню</button>
+            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Комплекси</button>
+            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Перші страви</button>
+            <button class="px-5 py-2.5 bg-white text-stone-500 border border-stone-200 rounded-full font-bold text-sm whitespace-nowrap">Другі страви</button>
+        </div>
+
+        <!-- Menu Grid -->
+        <div class="px-6 grid grid-cols-1 gap-6 mt-4">
+            
+            {% if not shift %}
+            <!-- Canteen Closed State -->
+            <div class="py-20 text-center flex flex-col items-center">
+                <div class="w-24 h-24 bg-stone-100 rounded-full flex items-center justify-center mb-6 text-stone-300">
+                    <i data-lucide="clock" class="w-12 h-12"></i>
+                </div>
+                <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-2">Ми зачинені</h2>
+                <p class="text-stone-500 font-bold max-w-[240px] mx-auto">Адміністратор ще не відкрив зміну. Поверніться пізніше!</p>
+                <div class="mt-8 text-7xl font-black text-stone-100 tracking-tighter" x-data="{ time: '' }" x-init="setInterval(() => { const d = new Date(); time = d.toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit'}) }, 1000)" x-text="time"></div>
+            </div>
+            {% else %}
+
+            <!-- Complex Meals (Combos) -->
+            {% for combo in combos %}
+            <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 p-4">
+                    <span class="bg-brand-terracotta text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Комплекс</span>
+                </div>
+                <div class="flex items-center mb-4">
+                    <div class="w-20 h-20 bg-brand-terracotta/5 rounded-2xl flex items-center justify-center mr-4">
+                        <i data-lucide="layers" class="w-10 h-10 text-brand-terracotta/40"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-xl text-stone-900 leading-tight">{{ combo.name }}</h3>
+                        <p class="text-stone-400 text-xs font-bold mt-1">
+                            {% for item in combo.dishes.all %}{{ item.name }}{% if not forloop.last %} + {% endif %}{% endfor %}
+                        </p>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div>
+                        <span class="text-2xl font-black text-brand-terracotta">{{ combo.price }} ₴</span>
+                    </div>
+                    <button @click="addToCart({{ combo.id }}, '{{ combo.name }}', {{ combo.price }}, 'combo')" class="px-6 py-3 bg-stone-900 text-white font-black rounded-2xl active:scale-95 transition-transform flex items-center">
+                        <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Додати
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- Single Dishes from Inventory -->
+            {% for item in inventory %}
+            <div class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 flex space-x-4">
+                <div class="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 flex items-center justify-center">
+                    <i data-lucide="utensils" class="text-stone-300 w-8 h-8"></i>
+                </div>
+                <div class="flex-1 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-black text-lg text-stone-900 leading-tight">{{ item.dish.name }}</h3>
+                        <p class="text-stone-400 text-xs font-bold mt-1">{{ item.dish.weight_info }}</p>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="font-black text-brand-terracotta text-xl">{{ item.dish.price }} ₴</span>
+                        <button @click="addToCart({{ item.dish.id }}, '{{ item.dish.name }}', {{ item.dish.price }}, 'dish')" class="w-10 h-10 bg-stone-100 text-stone-900 rounded-xl flex items-center justify-center active:scale-90 transition-transform">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% endif %}
+        </div>
+    </main>
+
+    <!-- Bottom Action (Cart Summary) -->
+    <template x-if="cartCount > 0 && !showCart">
+        <div class="fixed bottom-6 inset-x-6 z-40" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-10 opacity-0" x-transition:enter-end="translate-y-0 opacity-100">
+            <button @click="showCart = true" class="w-full bg-stone-900 text-white p-5 rounded-2xl shadow-2xl flex justify-between items-center">
+                <div class="flex items-center">
+                    <div class="bg-white/20 w-8 h-8 rounded-lg flex items-center justify-center mr-3 font-black text-sm" x-text="cartCount"></div>
+                    <span class="font-bold">Переглянути кошик</span>
+                </div>
+                <span class="font-black text-xl" x-text="cartTotal + ' ₴'"></span>
+            </button>
+        </div>
+    </template>
+
+    <!-- Cart / Checkout Modal -->
+    <div x-show="showCart" class="fixed inset-0 z-50 flex flex-col bg-white" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0">
+        
+        <header class="px-6 py-6 border-b border-stone-100 flex items-center justify-between">
+            <button @click="showCart = false" class="text-stone-400"><i data-lucide="chevron-left" class="w-8 h-8"></i></button>
+            <h2 class="font-black text-xl text-stone-900 tracking-tight">Ваше замовлення</h2>
+            <div class="w-8"></div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto px-6 py-8">
+            <!-- Items -->
+            <div class="space-y-6 mb-12">
+                <template x-for="item in cart">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1">
+                            <h4 class="font-bold text-stone-900" x-text="item.name"></h4>
+                            <p class="text-xs font-bold text-stone-400" x-text="item.qty + ' x ' + item.price + ' ₴'"></p>
+                        </div>
+                        <span class="font-black text-stone-900" x-text="(item.qty * item.price) + ' ₴'"></span>
+                    </div>
+                </template>
+            </div>
+
+            <!-- TIME SLOT SELECTION -->
+            <div class="mb-12">
+                <h3 class="font-black text-xl text-stone-900 tracking-tight mb-4">Оберіть час отримання</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <template x-for="slot in slots">
+                        <button @click="selectedSlot = slot" 
+                                :class="selectedSlot === slot ? 'bg-brand-terracotta text-white border-brand-terracotta' : 'bg-white text-stone-600 border-stone-200'"
+                                class="py-4 border-2 rounded-2xl font-bold text-sm transition-all text-center">
+                            <span x-text="slot"></span>
+                        </button>
+                    </template>
+                </div>
+                <p class="mt-4 text-xs font-bold text-stone-400 flex items-center">
+                    <i data-lucide="info" class="w-3.5 h-3.5 mr-2"></i> Замовлення буде готове до вашого приходу
+                </p>
+            </div>
+
+            <!-- Payment -->
+            <div>
+                <h3 class="font-black text-xl text-stone-900 tracking-tight mb-4">Спосіб оплати</h3>
+                <div class="space-y-3">
+                    <label class="flex items-center p-4 bg-stone-50 rounded-2xl border-2 border-stone-100">
+                        <input type="radio" name="pay" checked class="w-5 h-5 accent-brand-terracotta mr-4">
+                        <div class="flex-1 font-bold text-stone-800">Карткою онлайн</div>
+                        <i data-lucide="credit-card" class="text-stone-400"></i>
+                    </label>
+                    <label class="flex items-center p-4 bg-stone-50 rounded-2xl border-2 border-transparent opacity-50">
+                        <input type="radio" name="pay" disabled class="w-5 h-5 mr-4">
+                        <div class="flex-1 font-bold text-stone-800">Готівкою при отриманні</div>
+                        <i data-lucide="banknote" class="text-stone-400"></i>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-brand-paper border-t border-stone-200">
+            <div class="flex justify-between items-end mb-6">
+                <span class="text-stone-500 font-bold uppercase tracking-widest text-xs">Разом</span>
+                <span class="text-3xl font-black text-stone-900 tracking-tighter" x-text="cartTotal + ' ₴'"></span>
+            </div>
+            <button @click="submitOrder()" :disabled="!selectedSlot || cartCount === 0" class="w-full py-5 bg-brand-terracotta disabled:bg-stone-300 text-white rounded-2xl font-black text-xl shadow-xl shadow-brand-terracotta/20 active:scale-95 transition-all">
+                ОПЛАТИТИ ТА ЗАМОВИТИ
+            </button>
+        </div>
+    </div>
+
+    <!-- Success State (Overlays everything) -->
+    <div x-show="step === 'success'" class="fixed inset-0 z-[60] bg-brand-cream flex flex-col items-center justify-center px-8 text-center" x-transition>
+        <div class="w-24 h-24 bg-brand-olive text-white rounded-full flex items-center justify-center mb-8 shadow-lg shadow-brand-olive/20">
+            <i data-lucide="check" class="w-12 h-12"></i>
+        </div>
+        <h2 class="text-4xl font-black text-stone-900 tracking-tighter mb-4">Замовлення #0455 прийнято!</h2>
+        <p class="text-lg font-semibold text-stone-500 mb-10 leading-relaxed">Ми чекаємо на вас о <span class="text-stone-900 font-black" x-text="selectedSlot"></span>.<br>Покажіть цей екран касиру для отримання.</p>
+        
+        <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-stone-100 mb-12">
+            <!-- Mock QR -->
+            <div class="w-48 h-48 bg-stone-900 rounded-3xl flex items-center justify-center relative overflow-hidden">
+                <div class="grid grid-cols-4 gap-2 opacity-20">
+                    <template x-for="i in 16"><div class="w-8 h-8 bg-white rounded-sm"></div></template>
+                </div>
+                <i data-lucide="qr-code" class="absolute w-24 h-24 text-white"></i>
+            </div>
+        </div>
+
+        <button @click="step = 'menu'; cartCount = 0; selectedSlot = null" class="font-black text-brand-terracotta uppercase tracking-widest text-sm">Повернутися до меню</button>
+    </div>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

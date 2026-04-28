@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Їжачок - Gastronomic UI (ERP Features)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Manrope -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Manrope', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            terracotta: '#9A3412', // Warm primary (Orange-800)
+                            mustard: '#CA8A04',    // Warning/Secondary (Yellow-600)
+                            olive: '#4D7C0F',      // Success/Action (Lime-700)
+                            coral: '#EF4444',      // Alerts (Red-500)
+                            cream: '#FDFBF7',      // Background
+                            paper: '#F5F5F0',      // Slightly darker background for panels
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Manrope', sans-serif; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-enter { animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        
+        @keyframes growUp { from { height: 0; } to { height: var(--h); } }
+        .bar-chart { animation: growUp 1s ease-out forwards; }
+        
+        /* Toggle Switch Customization */
+        .toggle-checkbox:checked { right: 0; border-color: #4D7C0F; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #4D7C0F; }
+    </style>
+</head>
+<body class="bg-brand-cream text-stone-800 h-screen overflow-hidden flex flex-col" x-data="{ activeTab: 'admin', adminTab: 'menu', posTab: 'online', showToast: false, showWriteOffModal: false }">
+
+    <!-- Top View Switcher (Technical) -->
+    <div class="bg-stone-900 text-stone-300 p-2 flex justify-center space-x-2 z-50 shrink-0 text-sm">
+        <span class="mr-4 font-bold flex items-center text-stone-400"><i data-lucide="layout-dashboard" class="mr-2 w-4 h-4"></i> Технічна панель (Мок-апи):</span>
+        <button @click="activeTab = 'pos'; setTimeout(() => lucide.createIcons(), 50)" :class="{'bg-brand-terracotta text-white': activeTab === 'pos', 'hover:bg-stone-800': activeTab !== 'pos'}" class="px-3 py-1 rounded transition-colors">POS-Каса</button>
+        <button @click="activeTab = 'client'; setTimeout(() => lucide.createIcons(), 50)" :class="{'bg-orange-500 text-white': activeTab === 'client', 'hover:bg-stone-800': activeTab !== 'client'}" class="px-3 py-1 rounded transition-colors">Клієнт</button>
+        <button @click="activeTab = 'admin'; setTimeout(() => lucide.createIcons(), 50)" :class="{'bg-brand-terracotta text-white': activeTab === 'admin', 'hover:bg-stone-800': activeTab !== 'admin'}" class="px-3 py-1 rounded transition-colors">Адмін-Панель</button>
+
+        <!-- Technical Toast Trigger moved here so it doesn't clutter Admin UI -->
+        <button @click="showToast = true; setTimeout(() => showToast = false, 5000)" class="absolute right-4 top-2 text-xs border border-stone-700 px-2 py-1 rounded hover:bg-stone-800 text-stone-400">
+            Симуляція: +1 Замовлення
+        </button>
+    </div>
+
+    <div class="flex-1 relative overflow-hidden">
+        
+        <!-- ========================================== -->
+        <!-- TASK 1: POS-Термінал                       -->
+        <!-- ========================================== -->
+        <div x-show="activeTab === 'pos'" class="absolute inset-0 flex flex-col bg-brand-cream" x-transition style="display: none;">
+            <div class="flex-1 flex items-center justify-center font-bold text-stone-400">POS-Каса працює у фоні. Переключіться через верхню панель.</div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TASK 2: Адмін-Панель                       -->
+        <!-- ========================================== -->
+        <div x-show="activeTab === 'admin'" class="absolute inset-0 bg-brand-cream flex" x-transition>
+            
+            <!-- Sidebar -->
+            <aside class="w-72 bg-brand-paper border-r border-stone-200/60 flex flex-col shrink-0">
+                <div class="p-8 pb-4">
+                    <div class="flex items-center text-brand-terracotta mb-10">
+                        <i data-lucide="sun" class="w-10 h-10 mr-3 fill-current"></i>
+                        <div>
+                            <div class="font-black text-2xl leading-none tracking-tight">ЇЖАЧОК</div>
+                            <div class="text-[10px] uppercase font-bold tracking-widest text-stone-500">мережа їдалень</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <nav class="flex-1 px-4 space-y-2 font-bold text-lg text-stone-600">
+                    <button @click="adminTab = 'dashboard'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'dashboard', 'hover:text-stone-900': adminTab !== 'dashboard'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors">
+                        Дашборд
+                    </button>
+                    <button @click="adminTab = 'menu'" :class="{'bg-stone-200/60 text-stone-900': adminTab === 'menu', 'hover:text-stone-900': adminTab !== 'menu'}" class="w-full flex items-center px-4 py-3 rounded-2xl transition-colors">
+                        Меню
+                    </button>
+                    <button class="w-full flex items-center px-4 py-3 rounded-2xl hover:text-stone-900 transition-colors">Склади</button>
+                    <button class="w-full flex items-center px-4 py-3 rounded-2xl hover:text-stone-900 transition-colors">Персонал</button>
+                </nav>
+                
+                <div class="p-8 border-t border-stone-200/60">
+                    <button class="flex items-center text-stone-500 hover:text-brand-coral transition-colors font-bold"><i data-lucide="log-out" class="w-5 h-5 mr-3"></i> Вийти з системи</button>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="flex-1 flex flex-col h-full relative">
+                
+                <!-- Dynamic Header -->
+                <header class="px-16 py-10 flex items-end justify-between shrink-0">
+                    <div>
+                        <h1 class="text-5xl font-black text-stone-900 tracking-tighter mb-2" x-text="
+                            adminTab === 'dashboard' ? 'Огляд показників' : 
+                            adminTab === 'menu' ? 'Управління меню' : 
+                            'Персонал та Ролі'
+                        "></h1>
+                        <p class="text-lg font-semibold text-stone-500" x-text="
+                            adminTab === 'dashboard' ? 'Сьогодні, 28 Квітня' : 
+                            adminTab === 'menu' ? 'Редагування асортименту та онлайн-вітрини' : 
+                            'Налаштування доступів співробітників'
+                        "></p>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <!-- Replaced Bell with Download Report Button as requested -->
+                        <button class="px-6 py-3 bg-stone-200/60 hover:bg-stone-300/60 text-stone-800 font-bold rounded-2xl transition-colors flex items-center shadow-sm">
+                            <i data-lucide="download" class="w-5 h-5 mr-2 opacity-50"></i> Звіт за день
+                        </button>
+                        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-stone-200 cursor-pointer">
+                            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                </header>
+
+                <div class="flex-1 overflow-y-auto px-16 pb-16">
+                    
+                    <!-- TAB: DASHBOARD -->
+                    <div x-show="adminTab === 'dashboard'" x-transition style="display: none;">
+                        <!-- KPI Row (Cardless) -->
+                        <div class="flex space-x-16 pb-10">
+                            <div>
+                                <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Загальний дохід</h3>
+                                <div class="flex items-baseline mb-2">
+                                    <span class="text-7xl font-black text-stone-900 tracking-tighter">34.8<span class="text-4xl text-stone-400 ml-1">k ₴</span></span>
+                                </div>
+                                <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="arrow-up-right" class="w-5 h-5 mr-1"></i> 12.4% <span class="text-stone-400 font-medium ml-2 text-sm">до вчора</span></div>
+                            </div>
+                            <div>
+                                <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Замовлення</h3>
+                                <div class="flex items-baseline mb-2">
+                                    <span class="text-7xl font-black text-stone-900 tracking-tighter">847</span>
+                                </div>
+                                <div class="text-brand-olive font-bold flex items-center text-lg"><i data-lucide="arrow-up-right" class="w-5 h-5 mr-1"></i> 8.7% <span class="text-stone-400 font-medium ml-2 text-sm">до вчора</span></div>
+                            </div>
+                            <div>
+                                <h3 class="text-stone-500 font-bold text-sm tracking-widest uppercase mb-4">Середній чек</h3>
+                                <div class="flex items-baseline mb-2">
+                                    <span class="text-7xl font-black text-stone-900 tracking-tighter">41<span class="text-4xl text-stone-400 ml-1">₴</span></span>
+                                </div>
+                                <div class="text-brand-coral font-bold flex items-center text-lg"><i data-lucide="arrow-down-right" class="w-5 h-5 mr-1"></i> 3.2% <span class="text-stone-400 font-medium ml-2 text-sm">до вчора</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Hourly Sales Chart (NEW) -->
+                        <div class="mb-14 border-t border-stone-200/60 pt-10">
+                            <h2 class="text-2xl font-black text-stone-900 tracking-tighter mb-8">Продажі по годинах (Пікові навантаження)</h2>
+                            <div class="h-48 flex items-end justify-between space-x-1 border-b border-stone-300 pb-2 relative">
+                                <div class="absolute left-0 bottom-full -ml-8 flex flex-col justify-between h-full text-[10px] font-bold text-stone-400 pb-2">
+                                    <span>8K</span><span>4K</span><span>0</span>
+                                </div>
+                                <!-- Bar segments -->
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 10%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 15%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 30%"></div>
+                                <div class="w-full bg-brand-terracotta rounded-t-md bar-chart shadow-lg" style="--h: 70%"></div>
+                                <div class="w-full bg-brand-terracotta rounded-t-md bar-chart shadow-lg opacity-80" style="--h: 95%"></div>
+                                <div class="w-full bg-brand-terracotta rounded-t-md bar-chart shadow-lg opacity-90" style="--h: 85%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 55%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 40%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 30%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 45%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 60%"></div>
+                                <div class="w-full bg-stone-200 rounded-t-sm bar-chart hover:bg-stone-300 transition-colors" style="--h: 20%"></div>
+                            </div>
+                            <div class="flex justify-between mt-2 text-[10px] font-bold text-stone-400">
+                                <span>08:00</span><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span><span>19:00</span>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Grid (Table & Tasks) -->
+                        <div class="grid grid-cols-2 gap-16">
+                            <!-- Margin Table (Portions) -->
+                            <div>
+                                <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-8">Маржинальність страв</h2>
+                                <table class="w-full text-left">
+                                    <thead>
+                                        <tr class="text-stone-400 text-xs font-bold uppercase tracking-widest border-b border-stone-200/60">
+                                            <th class="pb-4">Назва</th>
+                                            <th class="pb-4">Маржа</th>
+                                            <th class="pb-4 text-right">На вітрині</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="text-lg font-bold text-stone-800">
+                                        <tr class="border-b border-stone-100/50">
+                                            <td class="py-5">Салат Грецький</td>
+                                            <td class="py-5 text-brand-olive">72%</td>
+                                            <td class="py-5 text-right font-medium text-stone-500">12 порцій</td>
+                                        </tr>
+                                        <tr class="border-b border-stone-100/50">
+                                            <td class="py-5">Борщ український</td>
+                                            <td class="py-5 text-brand-olive">70%</td>
+                                            <td class="py-5 text-right font-medium text-stone-500">14 порцій</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="py-5">Котлета по-київськи</td>
+                                            <td class="py-5 text-brand-coral flex items-center">19.7% <i data-lucide="alert-triangle" class="w-4 h-4 ml-2 opacity-50"></i></td>
+                                            <td class="py-5 text-right font-medium text-stone-500">2 порції</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Tasks -->
+                            <div class="bg-brand-paper rounded-3xl p-10">
+                                <h2 class="text-2xl font-black text-stone-900 tracking-tighter mb-8">Задачі на сьогодні</h2>
+                                <ul class="space-y-6 font-bold text-stone-800 text-lg">
+                                    <li class="flex items-start">
+                                        <!-- Interactive Write-off task -->
+                                        <button @click="showWriteOffModal = true" class="flex items-center group text-left">
+                                            <div class="w-6 h-6 rounded border-2 border-stone-300 mr-4 group-hover:border-brand-terracotta transition-colors flex shrink-0"></div>
+                                            <span class="group-hover:text-brand-terracotta transition-colors">Списати залишки в їдальні на Шевченка (Зміна #105)</span>
+                                        </button>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <div class="w-6 h-6 rounded bg-brand-olive text-white flex items-center justify-center mr-4 mt-0.5 shrink-0"><i data-lucide="check" class="w-4 h-4"></i></div>
+                                        <span class="text-stone-400 line-through">Переглянути звіт по АВС-аналізу</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: MENU EDITOR (Master-Detail) -->
+                    <div x-show="adminTab === 'menu'" x-transition class="h-full flex flex-col" style="display: none;">
+                        
+                        <div class="flex flex-1 overflow-hidden">
+                            <!-- LEFT PANEL: Master List -->
+                            <div class="w-[35%] border-r border-stone-200/60 pr-10 flex flex-col">
+                                <!-- Search & Filters -->
+                                <div class="mb-6 shrink-0">
+                                    <div class="relative mb-4">
+                                        <i data-lucide="search" class="absolute left-0 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5"></i>
+                                        <input type="text" placeholder="Пошук страви..." class="w-full bg-transparent border-b-2 border-stone-300 text-lg font-bold text-stone-900 pl-8 pb-2 focus:border-brand-terracotta outline-none transition-colors">
+                                    </div>
+                                    <div class="flex space-x-2 overflow-x-auto hide-scrollbar pb-2">
+                                        <button class="px-4 py-1.5 bg-stone-800 text-white rounded-full text-xs font-bold whitespace-nowrap">Усі</button>
+                                        <button class="px-4 py-1.5 border-2 border-stone-200/60 text-stone-500 rounded-full text-xs font-bold whitespace-nowrap hover:border-stone-400">Перші</button>
+                                        <button class="px-4 py-1.5 border-2 border-stone-200/60 text-stone-500 rounded-full text-xs font-bold whitespace-nowrap hover:border-stone-400">Другі</button>
+                                    </div>
+                                </div>
+
+                                <!-- List -->
+                                <div class="flex-1 overflow-y-auto pr-2 space-y-4">
+                                    <!-- Selected Item -->
+                                    <div class="flex items-center p-3 rounded-2xl bg-brand-paper border border-stone-200 cursor-pointer">
+                                        <img src="https://images.unsplash.com/photo-1547592180-85f173990554?w=100&h=100&fit=crop" class="w-12 h-12 rounded-xl object-cover mr-4">
+                                        <div class="flex-1">
+                                            <div class="font-bold text-stone-900">Борщ український</div>
+                                            <div class="font-black text-brand-terracotta text-sm">55 ₴</div>
+                                        </div>
+                                        <!-- Toggle Switch: In Stock -->
+                                        <div class="flex flex-col items-center ml-2">
+                                            <label class="flex items-center cursor-pointer">
+                                                <div class="relative">
+                                                    <input type="checkbox" checked class="sr-only">
+                                                    <div class="block bg-brand-olive w-10 h-6 rounded-full transition-colors"></div>
+                                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4"></div>
+                                                </div>
+                                            </label>
+                                            <span class="text-[9px] font-bold text-brand-olive mt-1 uppercase">В меню</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Unselected Item -->
+                                    <div class="flex items-center p-3 rounded-2xl hover:bg-stone-200/30 cursor-pointer transition-colors group">
+                                        <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=100&h=100&fit=crop" class="w-12 h-12 rounded-xl object-cover mr-4 opacity-80 group-hover:opacity-100">
+                                        <div class="flex-1">
+                                            <div class="font-bold text-stone-600 group-hover:text-stone-900 transition-colors">Салат Грецький</div>
+                                            <div class="font-black text-stone-500 text-sm">65 ₴</div>
+                                        </div>
+                                        <div class="flex flex-col items-center ml-2">
+                                            <label class="flex items-center cursor-pointer">
+                                                <div class="relative">
+                                                    <input type="checkbox" checked class="sr-only">
+                                                    <div class="block bg-brand-olive w-10 h-6 rounded-full transition-colors"></div>
+                                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform translate-x-4"></div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Out of stock Item -->
+                                    <div class="flex items-center p-3 rounded-2xl hover:bg-stone-200/30 cursor-pointer transition-colors group opacity-60">
+                                        <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center mr-4">
+                                            <i data-lucide="drumstick" class="w-6 h-6 text-brand-terracotta"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="font-bold text-stone-600 line-through">Котлета по-київськи</div>
+                                            <div class="font-black text-stone-500 text-sm">85 ₴</div>
+                                        </div>
+                                        <div class="flex flex-col items-center ml-2">
+                                            <label class="flex items-center cursor-pointer">
+                                                <div class="relative">
+                                                    <input type="checkbox" class="sr-only">
+                                                    <div class="block bg-stone-300 w-10 h-6 rounded-full transition-colors"></div>
+                                                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+                                                </div>
+                                            </label>
+                                            <span class="text-[9px] font-bold text-stone-400 mt-1 uppercase">Стоп</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- RIGHT PANEL: Detail Editor -->
+                            <div class="w-[65%] pl-10 overflow-y-auto pb-10 flex flex-col">
+                                <div class="flex justify-between items-center mb-8 shrink-0">
+                                    <h2 class="text-3xl font-black text-stone-900 tracking-tighter">Редагування страви</h2>
+                                    <div class="flex space-x-3">
+                                        <button class="w-10 h-10 rounded-full border-2 border-stone-200/60 flex items-center justify-center text-stone-400 hover:text-brand-coral hover:border-brand-coral transition-colors" title="Видалити">
+                                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                        </button>
+                                        <button class="w-10 h-10 rounded-full border-2 border-stone-200/60 flex items-center justify-center text-stone-400 hover:text-stone-800 transition-colors" title="Дублювати">
+                                            <i data-lucide="copy" class="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-10 shrink-0">
+                                    <!-- Image Drag & Drop -->
+                                    <div class="aspect-square bg-stone-200/50 rounded-3xl overflow-hidden relative group cursor-pointer border-2 border-dashed border-stone-300 hover:border-brand-terracotta transition-colors flex flex-col items-center justify-center text-stone-500 hover:text-brand-terracotta">
+                                        <img src="https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=600&q=80" class="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-20 transition-opacity">
+                                        <div class="relative z-10 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity text-center p-4">
+                                            <i data-lucide="upload-cloud" class="w-10 h-10 mb-2"></i>
+                                            <span class="font-bold text-lg text-stone-900">Завантажити нове фото</span>
+                                            <span class="text-xs font-semibold text-stone-500 mt-1">Drag and drop або клікніть</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Core Fields -->
+                                    <div class="flex flex-col justify-center space-y-8">
+                                        <div>
+                                            <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Назва страви</label>
+                                            <input type="text" value="Борщ український" class="w-full bg-transparent border-b-2 border-stone-300 text-3xl font-black text-stone-900 pb-2 focus:border-brand-terracotta outline-none transition-colors">
+                                        </div>
+                                        <div>
+                                            <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Категорія</label>
+                                            <select class="w-full bg-transparent border-b-2 border-stone-300 text-xl font-bold text-stone-900 pb-2 focus:border-brand-terracotta outline-none transition-colors appearance-none">
+                                                <option>Перші страви</option>
+                                                <option>Другі страви</option>
+                                                <option>Салати</option>
+                                            </select>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-6">
+                                            <div>
+                                                <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Собівартість (₴)</label>
+                                                <input type="number" value="16.50" class="w-full bg-transparent border-b-2 border-stone-300 text-2xl font-black text-stone-500 pb-2 focus:border-stone-500 outline-none transition-colors">
+                                            </div>
+                                            <div>
+                                                <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Ціна (₴)</label>
+                                                <input type="number" value="55.00" class="w-full bg-transparent border-b-2 border-stone-300 text-3xl font-black text-brand-terracotta pb-1 focus:border-brand-terracotta outline-none transition-colors">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-10 shrink-0">
+                                    <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-4">Опис для клієнтів (Онлайн меню)</label>
+                                    <textarea rows="3" class="w-full bg-transparent border-b-2 border-stone-300 text-lg font-medium text-stone-700 pb-2 focus:border-brand-terracotta outline-none transition-colors leading-relaxed resize-none">Класичний український борщ на м'ясному бульйоні зі свіжою капустою, буряком та зеленню. Подається зі сметаною та пампушками.</textarea>
+                                </div>
+
+                                <div class="mt-auto pt-10 flex justify-end shrink-0">
+                                    <button class="px-8 py-4 bg-brand-terracotta text-white font-black text-lg rounded-2xl transition-transform active:scale-95 shadow-lg shadow-brand-terracotta/20 flex items-center">
+                                        <i data-lucide="save" class="w-5 h-5 mr-3"></i> ЗБЕРЕГТИ ЗМІНИ
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: USERS -->
+                    <div x-show="adminTab === 'users'" x-transition style="display: none;">
+                        <div class="flex justify-between items-center mb-12 border-b border-stone-200/60 pb-8">
+                            <h2 class="text-3xl font-black text-stone-900 tracking-tighter">Співробітники</h2>
+                        </div>
+                        <div class="text-center font-bold text-stone-400 mt-20">Модуль у розробці</div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TASK 3: Клієнт                             -->
+        <!-- ========================================== -->
+        <div x-show="activeTab === 'client'" class="absolute inset-0 bg-stone-200 flex justify-center overflow-y-auto" x-transition style="display: none;">
+            <div class="text-center mt-32 text-stone-500 font-bold"><p>Клієнтський модуль (збережено у фоні)</p></div>
+        </div>
+
+        <!-- Write-Off Interactive Modal -->
+        <div x-show="showWriteOffModal" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-sm" x-transition style="display: none;">
+            <div class="bg-brand-paper rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden" @click.away="showWriteOffModal = false">
+                <div class="p-8 border-b border-stone-200/60 flex justify-between items-start bg-brand-cream">
+                    <div>
+                        <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-1">Списання залишків</h2>
+                        <p class="font-bold text-stone-500">Закриття зміни #105 (Сьогодні, 18:30)</p>
+                    </div>
+                    <button @click="showWriteOffModal = false" class="w-10 h-10 rounded-full bg-stone-200/50 flex items-center justify-center text-stone-500 hover:bg-stone-300/50 transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-8 overflow-y-auto max-h-[50vh]">
+                    <div class="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-stone-50 border-b border-stone-200 text-stone-400 text-xs font-bold uppercase tracking-widest">
+                                <tr>
+                                    <th class="p-4">Назва страви</th>
+                                    <th class="p-4 text-right">Фактичний залишок</th>
+                                </tr>
+                            </thead>
+                            <tbody class="font-bold text-stone-800 text-lg divide-y divide-stone-100">
+                                <tr>
+                                    <td class="p-4">Салат Грецький</td>
+                                    <td class="p-4 text-right text-brand-coral">12 порцій</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-4">Борщ український</td>
+                                    <td class="p-4 text-right text-brand-coral">14 порцій</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-4">Котлета по-київськи</td>
+                                    <td class="p-4 text-right text-brand-coral">2 порції</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 text-sm font-bold text-stone-500 flex items-center bg-brand-mustard/10 text-brand-mustard p-4 rounded-xl">
+                        <i data-lucide="info" class="w-5 h-5 mr-3 shrink-0"></i>
+                        Після затвердження, залишки будуть автоматично обнулені, а дані занесені в Журнал списань.
+                    </div>
+                </div>
+                <div class="p-8 pt-0 flex justify-end space-x-4">
+                    <button @click="showWriteOffModal = false" class="px-6 py-3 text-stone-500 font-bold hover:text-stone-800 transition-colors">Скасувати</button>
+                    <button @click="showWriteOffModal = false" class="px-8 py-3 bg-brand-terracotta text-white font-black rounded-xl hover:bg-[#7c2a0e] transition-colors shadow-lg shadow-brand-terracotta/20">
+                        ЗАТВЕРДИТИ СПИСАННЯ
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

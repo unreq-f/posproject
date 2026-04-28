@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Dish, ComboMeal, Menu, Inventory
+from .models import Dish, ComboMeal, Inventory
 
 class DishSerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,10 +11,6 @@ class ComboMealSerializer(serializers.ModelSerializer):
         model = ComboMeal
         fields = '__all__'
 
-class MenuSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Menu
-        fields = '__all__'
 
 class InventorySerializer(serializers.ModelSerializer):
     class Meta:

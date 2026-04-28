@@ -1,27 +1,28 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Dish, ComboMeal, Menu, Inventory
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from .models import Dish, ComboMeal, Inventory
 from canteen.models import Shift
-from .serializers import DishSerializer, ComboMealSerializer, MenuSerializer, InventorySerializer, AddInventorySerializer
+from .serializers import DishSerializer, ComboMealSerializer, InventorySerializer, AddInventorySerializer
 from .services import add_inventory
 from django.shortcuts import get_object_or_404
 
 class DishViewSet(viewsets.ModelViewSet):
     queryset = Dish.objects.all()
     serializer_class = DishSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
 class ComboMealViewSet(viewsets.ModelViewSet):
     queryset = ComboMeal.objects.all()
     serializer_class = ComboMealSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
-class MenuViewSet(viewsets.ModelViewSet):
-    queryset = Menu.objects.all()
-    serializer_class = MenuSerializer
 
 class InventoryViewSet(viewsets.ModelViewSet):
     queryset = Inventory.objects.all()
     serializer_class = InventorySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     @action(detail=False, methods=['post'])
     def add_to_showcase(self, request):

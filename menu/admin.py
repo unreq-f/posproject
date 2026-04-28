@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Dish, ComboMeal, Menu, Inventory
+from .models import Dish, ComboMeal, Inventory
 
 @admin.register(Dish)
 class DishAdmin(admin.ModelAdmin):
@@ -11,9 +11,6 @@ class DishAdmin(admin.ModelAdmin):
 class ComboMealAdmin(admin.ModelAdmin):
     list_display = ('name', 'price')
 
-@admin.register(Menu)
-class MenuAdmin(admin.ModelAdmin):
-    list_display = ('id', 'shift')
 
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):

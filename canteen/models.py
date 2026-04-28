@@ -9,6 +9,7 @@ class Shift(models.Model):
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
+    initial_cash = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Розмінний фонд")
     responsible_staff = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='shifts')
 
     def __str__(self):
