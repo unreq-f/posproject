@@ -44,12 +44,12 @@
           isProcessingOnline: false,
           currentOnlineOrderId: null,
           get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
-          addToCart(id, name, price) {
-              let item = this.cart.find(i => i.id === id);
-              if (item) { item.qty++ } else { this.cart.push({ id, name, price, qty: 1 }) }
+          addToCart(id, name, price, type = 'dish') {
+              let item = this.cart.find(i => i.id === id && i.type === type);
+              if (item) { item.qty++ } else { this.cart.push({ id, name, price, qty: 1, type }) }
           },
-          removeFromCart(id) {
-              this.cart = this.cart.filter(i => i.id !== id);
+          removeFromCart(id, type) {
+              this.cart = this.cart.filter(i => !(i.id === id && i.type === type));
           },
           async checkout(method) {
               if (this.cart.length === 0) return;
@@ -60,7 +60,7 @@
                       payment_method: method,
                       amount_received: method === 'cash' ? this.cashReceived : this.cartTotal,
                       change_amount: method === 'cash' ? this.cashChange : 0,
-                      items: this.cart.map(i => ({ dish: i.id, quantity: i.qty }))
+                      items: this.cart.map(i => ({ [i.type]: i.id, quantity: i.qty }))
                   };
 
                   if (this.isProcessingOnline) {
@@ -107,7 +107,7 @@
               if (!isPaid) {
                   this.isProcessingOnline = true;
                   this.currentOnlineOrderId = orderId;
-                  this.cart = [{id: -1, name: 'Онлайн замовлення', price: total, qty: 1}]; 
+                  this.cart = [{id: -1, name: 'Онлайн замовлення', price: total, qty: 1, type: 'dish'}]; 
                   this.showCashModal = true;
                   return;
               }
@@ -303,14 +303,14 @@
                             <div class="text-xs font-semibold text-stone-500 mt-0.5" x-text="item.price + ' ₴ / шт'"></div>
                         </div>
                         <div class="flex items-center space-x-1.5 mx-3">
-                            <button @click="if(item.qty > 1) item.qty--" class="w-7 h-7 rounded-lg bg-stone-200/60 hover:bg-stone-300/60 text-stone-600 flex items-center justify-center transition-colors active:scale-90"><i data-lucide="minus" class="w-3.5 h-3.5"></i></button>
+                            <button @click="if(item.qty > 1) item.qty-- else removeFromCart(item.id, item.type)" class="w-7 h-7 rounded-lg bg-stone-200/60 hover:bg-stone-300/60 text-stone-600 flex items-center justify-center transition-colors active:scale-90"><i data-lucide="minus" class="w-3.5 h-3.5"></i></button>
                             <span class="w-7 text-center font-black text-sm text-stone-900" x-text="item.qty"></span>
                             <button @click="item.qty++" class="w-7 h-7 rounded-lg bg-brand-terracotta/10 hover:bg-brand-terracotta/20 text-brand-terracotta flex items-center justify-center transition-colors active:scale-90"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>
                         </div>
                         <div class="text-right w-16 shrink-0">
                             <span class="font-black text-base text-stone-900" x-text="(item.qty * item.price) + ' ₴'"></span>
                         </div>
-                        <button @click="removeFromCart(item.id)" class="ml-2 text-stone-300 hover:text-brand-coral transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        <button @click="removeFromCart(item.id, item.type)" class="ml-2 text-stone-300 hover:text-brand-coral transition-colors shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
                     </div>
                 </template>
             </div>
@@ -348,6 +348,7 @@
                         <button @click="posCategory = 'Гарніри'" :class="posCategory === 'Гарніри' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Гарніри</button>
                         <button @click="posCategory = 'Салати'" :class="posCategory === 'Салати' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Салати</button>
                         <button @click="posCategory = 'Десерти'" :class="posCategory === 'Десерти' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Десерти</button>
+                        <button @click="posCategory = 'Комплекси'" :class="posCategory === 'Комплекси' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Комплекси</button>
                     </div>
                 </div>
                 <div class="flex-1 overflow-y-auto px-8 py-6">
@@ -356,10 +357,16 @@
                         {% for item in inventory %}
                         <div x-show="posCategory === 'all' || '{{ item.dish.category|escapejs }}' === posCategory"
                              class="{% if item.quantity > 0 %}cursor-pointer group{% else %}cursor-not-allowed opacity-50 pointer-events-none{% endif %}" 
-                             {% if item.quantity > 0 %}@click="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }})"{% endif %}>
+                             {% if item.quantity > 0 %}@click="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }}, 'dish')"{% endif %}>
                             <div class="aspect-square mb-3 rounded-3xl overflow-hidden relative {% if item.quantity == 0 %}bg-stone-200{% elif item.quantity <= 3 %}bg-orange-100{% else %}bg-stone-100{% endif %}">
-                                <div class="w-full h-full flex items-center justify-center">
-                                    <i data-lucide="utensils" class="w-12 h-12 text-stone-300"></i>
+                                <div class="w-full h-full">
+                                    {% if item.dish.image %}
+                                    <img src="{{ item.dish.image.url }}" class="w-full h-full object-cover">
+                                    {% else %}
+                                    <div class="w-full h-full flex items-center justify-center">
+                                        <i data-lucide="utensils" class="w-12 h-12 text-stone-300"></i>
+                                    </div>
+                                    {% endif %}
                                 </div>
                                 <span class="absolute top-2.5 right-2.5 bg-white/90 backdrop-blur-sm text-stone-700 text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-sm">
                                     {{ item.quantity }} порц.
@@ -382,6 +389,32 @@
                         {% empty %}
                         <div class="col-span-full py-20 text-center">
                             <p class="text-stone-400 font-bold">На вітрині поки що нічого немає.</p>
+                        </div>
+                        {% endfor %}
+                        
+                        <!-- Combos -->
+                        {% for combo in combos %}
+                        <div x-show="posCategory === 'all' || posCategory === 'Комплекси'"
+                             class="{% if combo.is_available %}cursor-pointer group{% else %}cursor-not-allowed opacity-50 pointer-events-none{% endif %}"
+                             {% if combo.is_available %}@click="addToCart({{ combo.id }}, '{{ combo.name|escapejs }}', {{ combo.price }}, 'combo')"{% endif %}>
+                            <div class="aspect-square mb-3 rounded-3xl overflow-hidden relative bg-brand-terracotta/5 border border-brand-terracotta/10">
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <i data-lucide="package" class="w-12 h-12 text-brand-terracotta/20"></i>
+                                </div>
+                                {% if not combo.is_available %}
+                                <div class="absolute inset-0 bg-stone-100/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                                    <span class="bg-stone-800 text-white font-bold text-xs uppercase px-3 py-1.5 rounded-full tracking-wide">Немає складових</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <h3 class="font-bold text-stone-900 text-base leading-tight">{{ combo.name }}</h3>
+                            <div class="text-xs font-semibold text-stone-400 mt-0.5 mb-2">Комплексний обід</div>
+                            <div class="flex justify-between items-center w-full">
+                                <span class="text-brand-terracotta font-black text-xl tracking-tight">{{ combo.price }} ₴</span>
+                                <button class="w-8 h-8 rounded-full {% if combo.is_available %}bg-brand-terracotta text-white{% else %}bg-stone-300 text-white{% endif %} flex items-center justify-center shadow-lg shadow-brand-terracotta/20 active:scale-90 transition-transform">
+                                    <i data-lucide="plus" class="w-4 h-4"></i>
+                                </button>
+                            </div>
                         </div>
                         {% endfor %}
 

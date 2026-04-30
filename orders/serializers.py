@@ -3,6 +3,7 @@ from .models import Order, OrderItem
 
 class OrderItemSerializer(serializers.ModelSerializer):
     item_name = serializers.SerializerMethodField()
+    quantity = serializers.IntegerField(min_value=1)
     
     class Meta:
         model = OrderItem
@@ -25,6 +26,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
+    amount_received = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, default=0)
     
     order_type_display = serializers.CharField(source='get_order_type_display', read_only=True)
     

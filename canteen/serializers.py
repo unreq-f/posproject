@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Shift, WriteOff
 
 class ShiftSerializer(serializers.ModelSerializer):
+    initial_cash = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0, default=0)
     class Meta:
         model = Shift
         fields = '__all__'

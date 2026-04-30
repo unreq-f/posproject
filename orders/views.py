@@ -131,9 +131,18 @@ class POSView(LoginRequiredMixin, View):
         online_orders = Order.objects.none()
         
         inventory = []
+        combos = []
         if active_shift:
             inventory = Inventory.objects.filter(shift=active_shift).select_related('dish')
-            # Онлайн-замовлення, які очікують видачі (і оплачені картою 'paid', і готівкові 'pending')
+            # Робимо мапу для перевірки доступності комбо
+            inventory_map = {item.dish_id: item.quantity for item in inventory}
+            
+            combos_qs = ComboMeal.objects.prefetch_related('dishes').all()
+            for combo in combos_qs:
+                combo.is_available = all(inventory_map.get(d.id, 0) > 0 for d in combo.dishes.all())
+                combos.append(combo)
+
+            # Онлайн-замовлення...
             online_orders = Order.objects.filter(
                 shift=active_shift, 
                 order_type='online', 
@@ -142,6 +151,7 @@ class POSView(LoginRequiredMixin, View):
             
         return render(request, 'orders/pos.html', {
             'inventory': inventory,
+            'combos': combos,
             'active_shift': active_shift,
             'next_order_id': next_order_id,
             'online_orders': online_orders
