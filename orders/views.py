@@ -79,7 +79,15 @@ class ClientMenuView(LoginRequiredMixin, View):
         combos = []
         if active_shift:
             inventory = Inventory.objects.filter(shift=active_shift).select_related('dish')
-            combos = ComboMeal.objects.all()
+            # Створюємо мапу залишків для швидкої перевірки комбо
+            inventory_map = {item.dish_id: item.quantity for item in inventory}
+            
+            combos_qs = ComboMeal.objects.prefetch_related('dishes').all()
+            combos = []
+            for combo in combos_qs:
+                # Комбо доступне, тільки якщо ВСІ його страви є на вітрині і їх > 0
+                combo.is_available = all(inventory_map.get(d.id, 0) > 0 for d in combo.dishes.all())
+                combos.append(combo)
         
         # Генерація слотів часу (кожні 15 хв)
         now = datetime.now()
@@ -115,7 +123,7 @@ class ClientMenuView(LoginRequiredMixin, View):
 class POSView(LoginRequiredMixin, View):
     """POS-термінал — тільки для касирів та адмінів"""
     def get(self, request):
-        if request.user.role not in ['admin', 'cashier']:
+        if request.user.role not in ['admin', 'staff']:
             return redirect('client_menu')
         
         active_shift = Shift.objects.filter(status='open').first()
@@ -125,7 +133,12 @@ class POSView(LoginRequiredMixin, View):
         inventory = []
         if active_shift:
             inventory = Inventory.objects.filter(shift=active_shift).select_related('dish')
-            online_orders = Order.objects.filter(shift=active_shift, order_type='online', status='pending').order_by('pickup_time')
+            # Онлайн-замовлення, які очікують видачі (і оплачені картою 'paid', і готівкові 'pending')
+            online_orders = Order.objects.filter(
+                shift=active_shift, 
+                order_type='online', 
+                status__in=['pending', 'paid']
+            ).order_by('pickup_time')
             
         return render(request, 'orders/pos.html', {
             'inventory': inventory,

@@ -160,8 +160,15 @@
             <!-- Complex Meals (Combos) -->
             {% for combo in combos %}
             <div x-show="activeCategory === 'all' || activeCategory === 'Комплекси'" 
-                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 relative overflow-hidden group active:scale-[0.98] transition-transform"
-                 @click="selectedProduct = { id: {{ combo.id }}, name: '{{ combo.name|escapejs }}', price: {{ combo.price }}, type: 'combo', description: '{% for item in combo.dishes.all %}{{ item.name }}{% if not forloop.last %} + {% endif %}{% endfor %}', image: null }">
+                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 relative overflow-hidden group {% if combo.is_available %}active:scale-[0.98] cursor-pointer{% else %}opacity-60 grayscale cursor-not-allowed{% endif %} transition-all"
+                 {% if combo.is_available %}@click="selectedProduct = { id: {{ combo.id }}, name: '{{ combo.name|escapejs }}', price: {{ combo.price }}, type: 'combo', description: '{% for item in combo.dishes.all %}{{ item.name }}{% if not forloop.last %} + {% endif %}{% endfor %}', image: null }"{% endif %}>
+                
+                {% if not combo.is_available %}
+                <div class="absolute inset-0 bg-stone-100/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                    <span class="bg-stone-800 text-white font-black text-[10px] uppercase px-4 py-2 rounded-full tracking-widest shadow-xl">Продано</span>
+                </div>
+                {% endif %}
+
                 <div class="absolute top-0 right-0 p-4">
                     <span class="bg-brand-terracotta text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Комплекс</span>
                 </div>
@@ -180,9 +187,13 @@
                     <div>
                         <span class="text-2xl font-black text-brand-terracotta">{{ combo.price }} ₴</span>
                     </div>
+                    {% if combo.is_available %}
                     <button @click.stop="addToCart({{ combo.id }}, '{{ combo.name|escapejs }}', {{ combo.price }}, 'combo')" class="px-6 py-3 bg-stone-900 text-white font-black rounded-2xl active:scale-95 transition-transform flex items-center">
                         <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Додати
                     </button>
+                    {% else %}
+                    <div class="px-6 py-3 bg-stone-200 text-stone-400 font-black rounded-2xl flex items-center">Немає</div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -190,9 +201,16 @@
             <!-- Single Dishes from Inventory -->
             {% for item in inventory %}
             <div x-show="activeCategory === 'all' || activeCategory === '{{ item.dish.category|escapejs }}'" 
-                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 flex space-x-4 active:scale-[0.98] transition-transform"
-                 @click="selectedProduct = { id: {{ item.dish.id }}, name: '{{ item.dish.name|escapejs }}', price: {{ item.dish.price }}, type: 'dish', weight: '{{ item.dish.weight_info|escapejs }}', description: '{{ item.dish.description|escapejs }}', image: '{% if item.dish.image %}{{ item.dish.image.url }}{% endif %}' }">
-                <div class="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 flex items-center justify-center">
+                 class="bg-white rounded-[2rem] p-5 shadow-sm border border-stone-100 flex space-x-4 relative overflow-hidden {% if item.quantity > 0 %}active:scale-[0.98] cursor-pointer{% else %}opacity-60 grayscale cursor-not-allowed{% endif %} transition-all"
+                 {% if item.quantity > 0 %}@click="selectedProduct = { id: {{ item.dish.id }}, name: '{{ item.dish.name|escapejs }}', price: {{ item.dish.price }}, type: 'dish', weight: '{{ item.dish.weight_info|escapejs }}', description: '{{ item.dish.description|escapejs }}', image: '{% if item.dish.image %}{{ item.dish.image.url }}{% endif %}' }"{% endif %}>
+                
+                {% if item.quantity <= 0 %}
+                <div class="absolute inset-0 bg-stone-100/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                    <span class="bg-stone-800 text-white font-black text-[10px] uppercase px-4 py-2 rounded-full tracking-widest shadow-xl">Продано</span>
+                </div>
+                {% endif %}
+
+                <div class="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 flex items-center justify-center relative">
                     {% if item.dish.image %}
                     <img src="{{ item.dish.image.url }}" class="w-full h-full object-cover">
                     {% else %}
@@ -206,9 +224,13 @@
                     </div>
                     <div class="flex justify-between items-center">
                         <span class="font-black text-brand-terracotta text-xl">{{ item.dish.price }} ₴</span>
-                        <button @click.stop="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }}, 'dish')" class="w-10 h-10 bg-stone-100 text-stone-900 rounded-xl flex items-center justify-center active:scale-90 transition-transform">
+                        {% if item.quantity > 0 %}
+                        <button @click.stop="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }}, 'dish')" class="w-10 h-10 bg-stone-100 text-stone-900 rounded-xl flex items-center justify-center active:scale-90 transition-transform hover:bg-stone-200">
                             <i data-lucide="plus" class="w-5 h-5"></i>
                         </button>
+                        {% else %}
+                        <span class="text-[10px] font-black text-stone-400 uppercase">Немає</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>

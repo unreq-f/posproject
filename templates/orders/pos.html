@@ -406,6 +406,8 @@
                                 <div class="flex items-center space-x-2">
                                     {% if order.payment_method == 'cash' and order.status == 'pending' %}
                                     <span class="bg-white text-brand-terracotta text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Готівка</span>
+                                    {% elif order.status == 'paid' %}
+                                    <span class="bg-brand-olive text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Сплачено</span>
                                     {% endif %}
                                     <span class="font-bold flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> {{ order.pickup_time }}</span>
                                 </div>
