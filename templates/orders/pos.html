@@ -39,7 +39,10 @@
           posTab: 'menu', 
           showToast: false, 
           shiftStep: '{% if active_shift %}done{% else %}waiting{% endif %}',
+          posCategory: 'all',
           cart: [],
+          isProcessingOnline: false,
+          currentOnlineOrderId: null,
           get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
           addToCart(id, name, price) {
               let item = this.cart.find(i => i.id === id);
@@ -51,44 +54,63 @@
           async checkout(method) {
               if (this.cart.length === 0) return;
               try {
-                  const res = await fetch('/api/orders/', {
+                  let url = '/api/orders/';
+                  let body = {
+                      order_type: 'offline',
+                      payment_method: method,
+                      amount_received: method === 'cash' ? this.cashReceived : this.cartTotal,
+                      change_amount: method === 'cash' ? this.cashChange : 0,
+                      items: this.cart.map(i => ({ dish: i.id, quantity: i.qty }))
+                  };
+
+                  if (this.isProcessingOnline) {
+                      url = `/api/orders/${this.currentOnlineOrderId}/pay/`;
+                  }
+
+                  const res = await fetch(url, {
                       method: 'POST',
                       headers: { 
                           'Content-Type': 'application/json',
                           'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
                       },
-                      body: JSON.stringify({
-                          order_type: 'offline',
-                          payment_method: method,
-                          amount_received: method === 'cash' ? this.cashReceived : this.cartTotal,
-                          change_amount: method === 'cash' ? this.cashChange : 0,
-                          items: this.cart.map(i => ({ dish: i.id, quantity: i.qty }))
-                      })
+                      body: JSON.stringify(body)
                   });
+                  
                   if (!res.ok) {
                       const err = await res.json();
-                      alert('Помилка створення: ' + (err.detail || JSON.stringify(err)));
+                      alert('Помилка: ' + (err.detail || JSON.stringify(err)));
                       return;
                   }
-                  const data = await res.json();
-                  // Call /pay action to deduct inventory
-                  const payRes = await fetch(`/api/orders/${data.id}/pay/`, {
-                      method: 'POST',
-                      headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
-                  });
-                  if (payRes.ok) {
-                      this.cart = [];
-                      alert('Замовлення успішно оформлено!');
-                      window.location.reload();
-                  } else {
-                      const payErr = await payRes.json();
-                      alert('Помилка оплати: ' + (payErr.detail || 'Недостатньо залишків'));
+                  
+                  if (!this.isProcessingOnline) {
+                      const data = await res.json();
+                      const payRes = await fetch(`/api/orders/${data.id}/pay/`, {
+                          method: 'POST',
+                          headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+                      });
+                      if (!payRes.ok) {
+                          const payErr = await payRes.json();
+                          alert('Помилка списання: ' + (payErr.detail || 'Недостатньо залишків'));
+                          return;
+                      }
                   }
+
+                  this.cart = [];
+                  this.isProcessingOnline = false;
+                  alert('Замовлення успішно опрацьовано!');
+                  window.location.reload();
               } catch (e) {
                   alert('Помилка мережі');
               }
           },
-          async deliverOnlineOrder(orderId) {
+          async deliverOnlineOrder(orderId, total, isPaid) {
+              if (!isPaid) {
+                  this.isProcessingOnline = true;
+                  this.currentOnlineOrderId = orderId;
+                  this.cart = [{id: -1, name: 'Онлайн замовлення', price: total, qty: 1}]; 
+                  this.showCashModal = true;
+                  return;
+              }
               if(!confirm('Позначити замовлення як видане?')) return;
               try {
                   const res = await fetch(`/api/orders/${orderId}/pay/`, {
@@ -100,7 +122,7 @@
                       window.location.reload();
                   } else {
                       const err = await res.json();
-                      alert('Помилка видачі: ' + (err.detail || 'Недостатньо продуктів на складі'));
+                      alert('Помилка: ' + (err.detail || JSON.stringify(err)));
                   }
               } catch(e) { alert('Помилка мережі'); }
           },
@@ -317,17 +339,21 @@
             <div x-show="posTab === 'menu'" class="flex flex-col h-full absolute inset-0" x-transition>
                 <div class="px-8 pt-6 pb-2 overflow-x-auto hide-scrollbar shrink-0">
                     <div class="flex space-x-6 border-b border-stone-200/60 pb-3 text-base font-bold">
-                        <button class="text-stone-400 hover:text-stone-800 transition-colors">Всі страви</button>
-                        <button class="text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3">Комплекси</button>
-                        <button class="text-stone-400 hover:text-stone-800 transition-colors">Сніданки</button>
-                        <button class="text-stone-400 hover:text-stone-800 transition-colors">Супи</button>
+                        <button @click="posCategory = 'all'" :class="posCategory === 'all' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Всі страви</button>
+                        <button @click="posCategory = 'Перші страви'" :class="posCategory === 'Перші страви' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Перші страви</button>
+                        <button @click="posCategory = 'Другі страви'" :class="posCategory === 'Другі страви' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Другі страви</button>
+                        <button @click="posCategory = 'Гарніри'" :class="posCategory === 'Гарніри' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Гарніри</button>
+                        <button @click="posCategory = 'Салати'" :class="posCategory === 'Салати' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Салати</button>
+                        <button @click="posCategory = 'Десерти'" :class="posCategory === 'Десерти' ? 'text-brand-terracotta border-b-2 border-brand-terracotta pb-3 -mb-3' : 'text-stone-400 hover:text-stone-800'" class="transition-all">Десерти</button>
                     </div>
                 </div>
                 <div class="flex-1 overflow-y-auto px-8 py-6">
                     <div class="grid grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-x-6 gap-y-10">
 
                         {% for item in inventory %}
-                        <div class="{% if item.quantity > 0 %}cursor-pointer group{% else %}cursor-not-allowed opacity-50 pointer-events-none{% endif %}" {% if item.quantity > 0 %}@click="addToCart({{ item.dish.id }}, '{{ item.dish.name }}', {{ item.dish.price }})"{% endif %}>
+                        <div x-show="posCategory === 'all' || '{{ item.dish.category|escapejs }}' === posCategory"
+                             class="{% if item.quantity > 0 %}cursor-pointer group{% else %}cursor-not-allowed opacity-50 pointer-events-none{% endif %}" 
+                             {% if item.quantity > 0 %}@click="addToCart({{ item.dish.id }}, '{{ item.dish.name|escapejs }}', {{ item.dish.price }})"{% endif %}>
                             <div class="aspect-square mb-3 rounded-3xl overflow-hidden relative {% if item.quantity == 0 %}bg-stone-200{% elif item.quantity <= 3 %}bg-orange-100{% else %}bg-stone-100{% endif %}">
                                 <div class="w-full h-full flex items-center justify-center">
                                     <i data-lucide="utensils" class="w-12 h-12 text-stone-300"></i>
@@ -377,7 +403,12 @@
                         <div class="bg-white rounded-xl shadow-sm border-2 border-brand-terracotta/20 flex flex-col relative overflow-hidden">
                             <div class="bg-brand-terracotta text-white px-3 py-2 flex justify-between items-center text-sm">
                                 <span class="font-black">#{{ order.id }}</span>
-                                <span class="font-bold flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> {{ order.pickup_time }}</span>
+                                <div class="flex items-center space-x-2">
+                                    {% if order.payment_method == 'cash' and order.status == 'pending' %}
+                                    <span class="bg-white text-brand-terracotta text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Готівка</span>
+                                    {% endif %}
+                                    <span class="font-bold flex items-center"><i data-lucide="clock" class="w-3.5 h-3.5 mr-1"></i> {{ order.pickup_time }}</span>
+                                </div>
                             </div>
                             <div class="p-3 flex-1">
                                 <div class="text-[10px] text-stone-400 font-bold uppercase tracking-wider mb-2">{{ order.user.username }}</div>
@@ -385,13 +416,23 @@
                                     {% for item in order.items.all %}
                                     <li class="flex items-start">
                                         <span class="text-brand-terracotta mr-1.5 w-4 font-black text-right shrink-0">{{ item.quantity }}x</span>
-                                        <span class="leading-tight">{% if item.dish %}{{ item.dish.name }}{% else %}{{ item.combo.name }}{% endif %}</span>
+                                        <div class="flex-1">
+                                            <div class="leading-tight">{% if item.dish %}{{ item.dish.name }}{% else %}{{ item.combo.name }}{% endif %}</div>
+                                            {% if item.combo %}
+                                            <div class="text-[9px] text-stone-400 mt-0.5 font-bold">
+                                                {% for d in item.combo.dishes.all %}{{ d.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
                                     </li>
                                     {% endfor %}
                                 </ul>
                             </div>
                             <div class="p-2 border-t border-stone-100 bg-stone-50">
-                                <button @click="deliverOnlineOrder({{ order.id }})" class="w-full py-2.5 bg-brand-olive hover:bg-[#3f660c] text-white font-black text-sm rounded-lg shadow-sm transition-colors">ВИДАТИ</button>
+                                <button @click="deliverOnlineOrder({{ order.id }}, {{ order.total_amount }}, {{ order.status|yesno:"false,true" }})" 
+                                        class="w-full py-2.5 bg-brand-olive hover:bg-[#3f660c] text-white font-black text-sm rounded-lg shadow-sm transition-colors">
+                                    {% if order.payment_method == 'cash' and order.status == 'pending' %}ОПЛАТИТИ ТА ВИДАТИ{% else %}ВИДАТИ{% endif %}
+                                </button>
                             </div>
                         </div>
                         {% empty %}

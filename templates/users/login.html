@@ -103,10 +103,15 @@
                 <h2 class="text-3xl font-black text-stone-900 tracking-tighter mb-2">Створити аккаунт</h2>
                 <p class="text-stone-500 font-bold mb-6">Станьте частиною нашої родини</p>
                 
-                {% if signup_errors %}
+                {% if form.errors and show_signup %}
                 <div class="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6">
-                    {% for error in signup_errors %}
-                    <p class="text-brand-coral font-bold text-sm">{{ error }}</p>
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <p class="text-brand-coral font-bold text-sm"><b>{{ field.label }}:</b> {{ error }}</p>
+                        {% endfor %}
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <p class="text-brand-coral font-bold text-sm">{{ error }}</p>
                     {% endfor %}
                 </div>
                 {% endif %}
@@ -128,7 +133,7 @@
                         <label class="block text-stone-400 font-bold text-xs tracking-widest uppercase mb-2">Пароль</label>
                         <div class="relative">
                             <i data-lucide="lock" class="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5"></i>
-                            <input type="password" name="password" placeholder="••••••••" required class="w-full bg-stone-50 border border-stone-200 rounded-2xl pl-12 pr-4 py-4 font-bold text-stone-900 outline-none focus:border-brand-terracotta transition-colors">
+                            <input type="password" name="password1" placeholder="••••••••" required class="w-full bg-stone-50 border border-stone-200 rounded-2xl pl-12 pr-4 py-4 font-bold text-stone-900 outline-none focus:border-brand-terracotta transition-colors">
                         </div>
                     </div>
                     <div>

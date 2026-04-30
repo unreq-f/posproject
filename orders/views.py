@@ -18,6 +18,15 @@ class OrderViewSet(viewsets.ModelViewSet):
     def pay(self, request, pk=None):
         order = self.get_object()
         try:
+            # Оновлюємо дані про оплату, якщо вони передані (для готівки)
+            if 'amount_received' in request.data:
+                order.amount_received = request.data.get('amount_received')
+            if 'change_amount' in request.data:
+                order.change_amount = request.data.get('change_amount')
+            if 'payment_method' in request.data:
+                order.payment_method = request.data.get('payment_method')
+            order.save()
+
             paid_order = mark_order_as_paid(order)
             serializer = self.get_serializer(paid_order)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -88,7 +97,7 @@ class ClientMenuView(LoginRequiredMixin, View):
              minutes_to_add = (15 - now.minute % 15)
              current_time = now + timedelta(minutes=minutes_to_add)
 
-        end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
+        end_time = now.replace(hour=21, minute=0, second=0, microsecond=0)
         
         temp_time = current_time
         while temp_time < end_time:

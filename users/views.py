@@ -1,10 +1,12 @@
 from rest_framework import viewsets, permissions
 from django.views.generic import CreateView, RedirectView
+from django.shortcuts import redirect
 from django.contrib.auth.forms import UserCreationForm
 from django.urls import reverse_lazy, reverse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from .models import User
 from .serializers import UserSerializer
+from .forms import CustomUserCreationForm
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('id')
@@ -18,7 +20,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return self.queryset
 
 class SignupView(CreateView):
-    form_class = UserCreationForm
+    form_class = CustomUserCreationForm
     template_name = 'users/login.html'
     success_url = reverse_lazy('login')
 
@@ -31,7 +33,12 @@ class SignupView(CreateView):
         user = form.save(commit=False)
         user.role = 'client'
         user.save()
-        return super().form_valid(form)
+        
+        # Автоматичний вхід після реєстрації
+        from django.contrib.auth import login
+        login(self.request, user)
+        
+        return redirect('client_menu')
 
 class RoleBasedRedirectView(LoginRequiredMixin, RedirectView):
     permanent = False

@@ -37,12 +37,29 @@
     showCart: false,
     activeCategory: 'all',
     selectedProduct: null,
+    paymentMethod: 'card',
     slots: {{ time_slots|safe|default:"[]" }},
     get cartCount() { return this.cart.reduce((sum, item) => sum + item.qty, 0) },
     get cartTotal() { return this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0) },
+    init() {
+        this.$watch('showCart', value => {
+            if (value) this.$nextTick(() => lucide.createIcons());
+        });
+        lucide.createIcons();
+    },
     addToCart(id, name, price, type) {
         let item = this.cart.find(i => i.id === id && i.type === type);
         if (item) { item.qty++ } else { this.cart.push({ id, name, price, type, qty: 1 }) }
+    },
+    updateCartQty(id, type, delta) {
+        let item = this.cart.find(i => i.id === id && i.type === type);
+        if (item) {
+            item.qty += delta;
+            if (item.qty <= 0) {
+                this.cart = this.cart.filter(i => !(i.id === id && i.type === type));
+            }
+            this.$nextTick(() => lucide.createIcons());
+        }
     },
     async submitOrder() {
         if (!this.selectedSlot || this.cart.length === 0) return;
@@ -55,7 +72,7 @@
                 },
                 body: JSON.stringify({
                     order_type: 'online',
-                    payment_method: 'card',
+                    payment_method: this.paymentMethod,
                     pickup_time: this.selectedSlot,
                     items: this.cart.map(i => ({
                         dish: i.type === 'dish' ? i.id : null,
@@ -96,6 +113,12 @@
                     <span class="absolute -top-1 -right-1 bg-brand-coral text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white" x-text="cartCount"></span>
                 </template>
             </button>
+            <form action="{% url 'logout' %}" method="post" class="inline ml-2">
+                {% csrf_token %}
+                <button type="submit" class="p-2 text-stone-400 hover:text-brand-coral transition-colors">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+            </form>
         </div>
     </header>
 
@@ -221,12 +244,16 @@
             <!-- Items -->
             <div class="space-y-6 mb-12">
                 <template x-for="item in cart">
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center py-2">
                         <div class="flex-1">
-                            <h4 class="font-bold text-stone-900" x-text="item.name"></h4>
-                            <p class="text-xs font-bold text-stone-400" x-text="item.qty + ' x ' + item.price + ' ₴'"></p>
+                            <h4 class="font-bold text-stone-900 text-lg leading-tight" x-text="item.name"></h4>
+                            <p class="text-xs font-black text-brand-terracotta mt-1" x-text="item.price + ' ₴'"></p>
                         </div>
-                        <span class="font-black text-stone-900" x-text="(item.qty * item.price) + ' ₴'"></span>
+                        <div class="flex items-center bg-stone-100 rounded-xl p-1 shrink-0">
+                            <button @click="updateCartQty(item.id, item.type, -1)" class="w-8 h-8 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                            <span class="w-8 text-center font-black text-stone-900" x-text="item.qty"></span>
+                            <button @click="updateCartQty(item.id, item.type, 1)" class="w-8 h-8 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -234,14 +261,17 @@
             <!-- TIME SLOT SELECTION -->
             <div class="mb-12">
                 <h3 class="font-black text-xl text-stone-900 tracking-tight mb-4">Оберіть час отримання</h3>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-3" x-show="slots.length > 0">
                     <template x-for="slot in slots">
                         <button @click="selectedSlot = slot" 
-                                :class="selectedSlot === slot ? 'bg-brand-terracotta text-white border-brand-terracotta' : 'bg-white text-stone-600 border-stone-200'"
+                                :class="selectedSlot === slot ? 'bg-brand-terracotta text-white border-brand-terracotta shadow-lg' : 'bg-white text-stone-600 border-stone-200'"
                                 class="py-4 border-2 rounded-2xl font-bold text-sm transition-all text-center">
                             <span x-text="slot"></span>
                         </button>
                     </template>
+                </div>
+                <div x-show="slots.length === 0" class="p-6 bg-stone-100 rounded-2xl text-center">
+                    <p class="text-stone-500 font-bold text-sm">Прийом замовлень на сьогодні завершено. Поверніться завтра вранці!</p>
                 </div>
                 <p class="mt-4 text-xs font-bold text-stone-400 flex items-center">
                     <i data-lucide="info" class="w-3.5 h-3.5 mr-2"></i> Замовлення буде готове до вашого приходу
@@ -252,15 +282,21 @@
             <div>
                 <h3 class="font-black text-xl text-stone-900 tracking-tight mb-4">Спосіб оплати</h3>
                 <div class="space-y-3">
-                    <label class="flex items-center p-4 bg-stone-50 rounded-2xl border-2 border-stone-100">
-                        <input type="radio" name="pay" checked class="w-5 h-5 accent-brand-terracotta mr-4">
-                        <div class="flex-1 font-bold text-stone-800">Карткою онлайн</div>
-                        <i data-lucide="credit-card" class="text-stone-400"></i>
+                    <label class="flex items-center p-5 bg-white rounded-2xl border-2 border-stone-100 cursor-pointer transition-all has-[:checked]:border-brand-terracotta has-[:checked]:bg-brand-terracotta/[0.02]">
+                        <input type="radio" name="pay" value="card" x-model="paymentMethod" class="w-5 h-5 accent-brand-terracotta mr-4">
+                        <div class="flex-1">
+                            <div class="font-black text-stone-900">Карткою онлайн</div>
+                            <div class="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Apple Pay, Google Pay, Card</div>
+                        </div>
+                        <i data-lucide="credit-card" class="text-stone-400 w-6 h-6"></i>
                     </label>
-                    <label class="flex items-center p-4 bg-stone-50 rounded-2xl border-2 border-transparent opacity-50">
-                        <input type="radio" name="pay" disabled class="w-5 h-5 mr-4">
-                        <div class="flex-1 font-bold text-stone-800">Готівкою при отриманні</div>
-                        <i data-lucide="banknote" class="text-stone-400"></i>
+                    <label class="flex items-center p-5 bg-white rounded-2xl border-2 border-stone-100 cursor-pointer transition-all has-[:checked]:border-brand-terracotta has-[:checked]:bg-brand-terracotta/[0.02]">
+                        <input type="radio" name="pay" value="cash" x-model="paymentMethod" class="w-5 h-5 accent-brand-terracotta mr-4">
+                        <div class="flex-1">
+                            <div class="font-black text-stone-900">Готівкою при отриманні</div>
+                            <div class="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Оплата на касі їдальні</div>
+                        </div>
+                        <i data-lucide="banknote" class="text-stone-400 w-6 h-6"></i>
                     </label>
                 </div>
             </div>
@@ -299,7 +335,9 @@
     </div>
 
     <!-- Product Detail Modal -->
-    <div x-show="selectedProduct" class="fixed inset-0 z-[70] flex items-end justify-center" x-cloak x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+    <div x-show="selectedProduct" 
+         x-init="$watch('selectedProduct', val => { if(val) setTimeout(() => lucide.createIcons(), 50) })"
+         class="fixed inset-0 z-[70] flex items-end justify-center" x-cloak x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
         <div class="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" @click="selectedProduct = null"></div>
         <div class="bg-white w-full rounded-t-[3rem] relative z-10 max-h-[90vh] overflow-hidden flex flex-col shadow-2xl" 
              x-show="selectedProduct"
@@ -317,8 +355,9 @@
                     <img :src="selectedProduct.image" class="w-full h-full object-cover">
                 </template>
                 <template x-if="!selectedProduct?.image">
-                    <div class="w-full h-full flex items-center justify-center text-stone-300">
-                        <i data-lucide="utensils" class="w-20 h-20"></i>
+                    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 to-stone-200 text-stone-300">
+                        <i data-lucide="utensils" class="w-20 h-20 mb-4 opacity-20"></i>
+                        <span class="text-xs font-black uppercase tracking-widest opacity-40">Фото очікується</span>
                     </div>
                 </template>
             </div>
