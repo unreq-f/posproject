@@ -103,6 +103,10 @@
             <span class="font-black text-xl tracking-tight uppercase">Їжачок</span>
         </div>
         <div class="flex items-center space-x-2">
+            <div class="text-right mr-2">
+                <div class="text-[8px] font-black text-stone-400 uppercase tracking-widest leading-none mb-1">Привіт,</div>
+                <div class="text-xs font-black text-stone-900 leading-none">{{ request.user.username }}</div>
+            </div>
             {% if request.user.role == 'admin' or request.user.role == 'staff' %}
             <a href="{% url 'admin_dashboard' %}" class="p-2 text-stone-400 hover:text-brand-terracotta transition-colors"><i data-lucide="settings" class="w-5 h-5"></i></a>
             <a href="{% url 'pos' %}" class="p-2 text-stone-400 hover:text-brand-terracotta transition-colors"><i data-lucide="monitor" class="w-5 h-5"></i></a>

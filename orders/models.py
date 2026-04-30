@@ -3,18 +3,18 @@ from django.conf import settings
 
 class Order(models.Model):
     STATUS_CHOICES = (
-        ('pending', 'В ожидании'),
-        ('paid', 'Оплачен'),
-        ('completed', 'Завершен'),
-        ('canceled', 'Отменен'),
+        ('pending', 'В очікуванні'),
+        ('paid', 'Сплачено'),
+        ('completed', 'Видано'),
+        ('canceled', 'Скасовано'),
     )
     ORDER_TYPE_CHOICES = (
         ('online', 'Онлайн'),
         ('offline', 'Офлайн (Касса)'),
     )
     PAYMENT_METHOD_CHOICES = (
-        ('card', 'Карта'),
-        ('cash', 'Наличные'),
+        ('card', 'Картка'),
+        ('cash', 'Готівка'),
         ('voucher', 'Ваучер (Талон)'),
     )
 
@@ -30,7 +30,7 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Заказ {self.id} ({self.get_status_display()})"
+        return f"Замовлення {self.id} ({self.get_status_display()})"
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')

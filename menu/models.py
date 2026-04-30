@@ -30,7 +30,7 @@ class Inventory(models.Model):
         unique_together = ('shift', 'dish')
 
     def __str__(self):
-        return f"{self.dish.name} - {self.quantity} шт. (Смена {self.shift.id})"
+        return f"{self.dish.name} - {self.quantity} шт. (Зміна {self.shift.id})"
 
 class Replenishment(models.Model):
     shift = models.ForeignKey('canteen.Shift', on_delete=models.CASCADE, related_name='replenishments')

@@ -3,9 +3,9 @@ from django.contrib.auth.models import AbstractUser
 
 class User(AbstractUser):
     ROLE_CHOICES = (
-        ('admin', 'Управляющий'),
-        ('staff', 'Кассир/Кухня'),
-        ('client', 'Клиент'),
+        ('admin', 'Адміністратор'),
+        ('staff', 'Персонал (Каса/Кухня)'),
+        ('client', 'Клієнт'),
     )
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='client')
 

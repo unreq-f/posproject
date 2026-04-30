@@ -3,8 +3,8 @@ from django.conf import settings
 
 class Shift(models.Model):
     STATUS_CHOICES = (
-        ('open', 'Открыта'),
-        ('closed', 'Закрыта'),
+        ('open', 'Відкрита'),
+        ('closed', 'Закрита'),
     )
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
@@ -16,7 +16,7 @@ class Shift(models.Model):
         ordering = ['-id']
 
     def __str__(self):
-        return f"Смена {self.id} ({self.get_status_display()})"
+        return f"Зміна {self.id} ({self.get_status_display()})"
 
 class WriteOff(models.Model):
     shift = models.ForeignKey(Shift, on_delete=models.CASCADE, related_name='writeoffs')
@@ -26,4 +26,4 @@ class WriteOff(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Списание {self.quantity} шт. {self.dish.name} (Смена {self.shift.id})"
+        return f"Списання {self.quantity} шт. {self.dish.name} (Зміна {self.shift.id})"

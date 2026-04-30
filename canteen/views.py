@@ -77,6 +77,7 @@ class AdminDashboardView(LoginRequiredMixin, View):
         
         from users.models import User
         users_list = User.objects.all().order_by('-id')
+        staff_users = User.objects.filter(role__in=['staff', 'admin']).order_by('username')
 
         return render(request, 'canteen/admin_dashboard.html', {
             'shifts': shifts,
@@ -89,6 +90,7 @@ class AdminDashboardView(LoginRequiredMixin, View):
             'all_orders': all_orders,
             'past_shifts': past_shifts,
             'users_list': users_list,
+            'staff_users': staff_users,
             'current_shift_revenue': current_shift_revenue,
             'current_shift_orders': current_shift_orders,
             'current_shift_inventory': current_shift_inventory,
