@@ -36,6 +36,20 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
+    def deliver(self, request, pk=None):
+        """Видача замовлення — переводить статус у 'completed'"""
+        order = self.get_object()
+        if order.status == 'completed':
+            return Response({'detail': 'Замовлення вже видано.'}, status=status.HTTP_400_BAD_REQUEST)
+        if order.status == 'canceled':
+            return Response({'detail': 'Неможливо видати скасоване замовлення.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        order.status = 'completed'
+        order.save()
+        serializer = self.get_serializer(order)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """Скасування замовлення з поверненням порцій на склад"""
         order = self.get_object()
@@ -105,7 +119,7 @@ class ClientMenuView(LoginRequiredMixin, View):
              minutes_to_add = (15 - now.minute % 15)
              current_time = now + timedelta(minutes=minutes_to_add)
 
-        end_time = now.replace(hour=21, minute=0, second=0, microsecond=0)
+        end_time = now.replace(hour=23, minute=0, second=0, microsecond=0)
         
         temp_time = current_time
         while temp_time < end_time:

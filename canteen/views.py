@@ -61,16 +61,19 @@ class AdminDashboardView(LoginRequiredMixin, View):
         
         # Статистика поточної зміни
         current_shift_revenue = 0
+        current_shift_card_revenue = 0
+        current_shift_cash_revenue = 0
         current_shift_orders = 0
         current_shift_inventory = []
         current_shift_orders_list = []
         if active_shift:
             current_shift_revenue = active_shift.orders.filter(status__in=['paid', 'completed']).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+            current_shift_card_revenue = active_shift.orders.filter(status__in=['paid', 'completed'], payment_method='card').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+            current_shift_cash_revenue = active_shift.orders.filter(status__in=['paid', 'completed'], payment_method='cash').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
             current_shift_orders = active_shift.orders.count()
             current_shift_inventory = Inventory.objects.filter(shift=active_shift).select_related('dish')
             current_shift_orders_list = active_shift.orders.all().order_by('-created_at')
-            current_shift_cash_total = active_shift.orders.filter(status__in=['paid', 'completed'], payment_method='cash').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-            active_shift.expected_cash = active_shift.initial_cash + current_shift_cash_total
+            active_shift.expected_cash = active_shift.initial_cash + current_shift_cash_revenue
         else:
             # Fallback for UI if no active shift but we want to show something?
             pass
@@ -92,6 +95,8 @@ class AdminDashboardView(LoginRequiredMixin, View):
             'users_list': users_list,
             'staff_users': staff_users,
             'current_shift_revenue': current_shift_revenue,
+            'current_shift_card_revenue': current_shift_card_revenue,
+            'current_shift_cash_revenue': current_shift_cash_revenue,
             'current_shift_orders': current_shift_orders,
             'current_shift_inventory': current_shift_inventory,
             'current_shift_orders_list': current_shift_orders_list,

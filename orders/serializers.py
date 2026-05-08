@@ -40,7 +40,7 @@ class OrderSerializer(serializers.ModelSerializer):
         
         # Автоматичний пошук активної зміни
         from canteen.models import Shift
-        from .services import deduct_inventory_from_order, OutOfStockError
+        from .services import deduct_inventory_from_order, mark_order_as_paid, OutOfStockError
         from django.db import transaction
         
         active_shift = Shift.objects.filter(status='open').first()
@@ -69,13 +69,19 @@ class OrderSerializer(serializers.ModelSerializer):
                     total += price * item_data['quantity']
                 
                 order.total_amount = total
+                order.amount_received = total if order.payment_method == 'card' else order.amount_received
                 order.save()
                 
                 # РЕЗЕРВУВАННЯ (Списання з вітрини)
                 deduct_inventory_from_order(order)
+                
+                # Онлайн-замовлення з карткою — одразу позначити як сплачене
+                if order.order_type == 'online' and order.payment_method == 'card':
+                    mark_order_as_paid(order)
                 
                 return order
         except OutOfStockError as e:
             raise serializers.ValidationError(str(e))
         except Exception as e:
             raise serializers.ValidationError(f"Помилка створення замовлення: {str(e)}")
+

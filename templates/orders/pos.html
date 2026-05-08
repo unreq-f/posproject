@@ -64,26 +64,48 @@
                   };
 
                   if (this.isProcessingOnline) {
+                      // Онлайн-замовлення: оплатити готівкою, потім видати
                       url = `/api/orders/${this.currentOnlineOrderId}/pay/`;
-                  }
-
-                  const res = await fetch(url, {
-                      method: 'POST',
-                      headers: { 
-                          'Content-Type': 'application/json',
-                          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
-                      },
-                      body: JSON.stringify(body)
-                  });
-                  
-                  if (!res.ok) {
-                      const err = await res.json();
-                      alert('Помилка: ' + (err.detail || JSON.stringify(err)));
-                      return;
-                  }
-                  
-                  if (!this.isProcessingOnline) {
+                      const res = await fetch(url, {
+                          method: 'POST',
+                          headers: { 
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
+                          },
+                          body: JSON.stringify(body)
+                      });
+                      if (!res.ok) {
+                          const err = await res.json();
+                          alert('Помилка оплати: ' + (err.detail || JSON.stringify(err)));
+                          return;
+                      }
+                      // Після оплати — видати
+                      const deliverRes = await fetch(`/api/orders/${this.currentOnlineOrderId}/deliver/`, {
+                          method: 'POST',
+                          headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+                      });
+                      if (!deliverRes.ok) {
+                          const err = await deliverRes.json();
+                          alert('Помилка видачі: ' + (err.detail || JSON.stringify(err)));
+                          return;
+                      }
+                  } else {
+                      // Офлайн-замовлення: створити → оплатити → видати
+                      const res = await fetch(url, {
+                          method: 'POST',
+                          headers: { 
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
+                          },
+                          body: JSON.stringify(body)
+                      });
+                      if (!res.ok) {
+                          const err = await res.json();
+                          alert('Помилка: ' + (err.detail || JSON.stringify(err)));
+                          return;
+                      }
                       const data = await res.json();
+                      // Оплатити
                       const payRes = await fetch(`/api/orders/${data.id}/pay/`, {
                           method: 'POST',
                           headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
@@ -93,15 +115,23 @@
                           alert('Помилка списання: ' + (payErr.detail || 'Недостатньо залишків'));
                           return;
                       }
+                      // Видати
+                      await fetch(`/api/orders/${data.id}/deliver/`, {
+                          method: 'POST',
+                          headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+                      });
                   }
 
                   this.cart = [];
                   this.isProcessingOnline = false;
+                  this.currentOnlineOrderId = null;
+                  this.showCashModal = false;
                   alert('Замовлення успішно опрацьовано!');
                   window.location.reload();
               } catch (e) {
                   alert('Помилка мережі');
               }
+
           },
           async deliverOnlineOrder(orderId, total, isPaid) {
               if (!isPaid) {
@@ -113,7 +143,7 @@
               }
               if(!confirm('Позначити замовлення як видане?')) return;
               try {
-                  const res = await fetch(`/api/orders/${orderId}/pay/`, {
+                  const res = await fetch(`/api/orders/${orderId}/deliver/`, {
                       method: 'POST',
                       headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
                   });
@@ -473,7 +503,7 @@
                                 </ul>
                             </div>
                             <div class="p-2 border-t border-stone-100 bg-stone-50">
-                                <button @click="deliverOnlineOrder({{ order.id }}, {{ order.total_amount }}, {{ order.status|yesno:"false,true" }})" 
+                                <button @click="deliverOnlineOrder({{ order.id }}, {{ order.total_amount|stringformat:'f' }}, {% if order.status == 'paid' %}true{% else %}false{% endif %})" 
                                         class="w-full py-2.5 bg-brand-olive hover:bg-[#3f660c] text-white font-black text-sm rounded-lg shadow-sm transition-colors">
                                     {% if order.payment_method == 'cash' and order.status == 'pending' %}ОПЛАТИТИ ТА ВИДАТИ{% else %}ВИДАТИ{% endif %}
                                 </button>
