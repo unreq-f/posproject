@@ -50,11 +50,6 @@ class AdminDashboardView(LoginRequiredMixin, View):
         dishes = Dish.objects.all()
         combos = ComboMeal.objects.all()
         
-        # Загальна аналітика
-        total_revenue = Order.objects.filter(status__in=['paid', 'completed']).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        total_orders = Order.objects.count()
-        average_check = total_revenue / total_orders if total_orders > 0 else 0
-        
         # Дані для нових розділів
         all_orders = Order.objects.all().order_by('-created_at')
         past_shifts = Shift.objects.filter(status='closed').order_by('-end_time')
@@ -87,9 +82,6 @@ class AdminDashboardView(LoginRequiredMixin, View):
             'active_shift': active_shift,
             'dishes': dishes,
             'combos': combos,
-            'total_revenue': total_revenue,
-            'total_orders': total_orders,
-            'average_check': average_check,
             'all_orders': all_orders,
             'past_shifts': past_shifts,
             'users_list': users_list,

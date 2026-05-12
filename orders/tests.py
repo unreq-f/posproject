@@ -27,7 +27,13 @@ def test_mark_order_as_paid_success(shift, dish_soup):
     order = Order.objects.create(shift=shift, payment_method='cash', total_amount=100.00)
     OrderItem.objects.create(order=order, dish=dish_soup, quantity=2, price_fixed=50.00)
     
-    # Оплачиваем заказ
+    # Резервуємо (списуємо) товар в транзакції
+    from django.db import transaction
+    from orders.services import deduct_inventory_from_order
+    with transaction.atomic():
+        deduct_inventory_from_order(order)
+    
+    # Оплачуємо замовлення
     paid_order = mark_order_as_paid(order)
     
     # Проверяем, что статус изменился
@@ -46,9 +52,12 @@ def test_mark_order_as_paid_out_of_stock_rollback(shift, dish_soup):
     order = Order.objects.create(shift=shift, payment_method='cash', total_amount=150.00)
     OrderItem.objects.create(order=order, dish=dish_soup, quantity=3, price_fixed=50.00)
     
-    # Попытка оплатить заказ должна вызвать ошибку OutOfStockError
+    # Попытка списания товара должна вызвать ошибку OutOfStockError
+    from django.db import transaction
+    from orders.services import deduct_inventory_from_order
     with pytest.raises(OutOfStockError):
-        mark_order_as_paid(order)
+        with transaction.atomic():
+            deduct_inventory_from_order(order)
     
     # Проверяем, что статус заказа НЕ изменился на paid
     order.refresh_from_db()
